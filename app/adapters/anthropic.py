@@ -26,7 +26,7 @@ class AnthropicAdapter(ModelAdapter):
                 },
                 json={
                     "model": api_model,
-                    "max_tokens": 512,
+                    "max_tokens": get_settings().completion_max_tokens,
                     "messages": [{"role": "user", "content": prompt}],
                 },
                 timeout=timeout,

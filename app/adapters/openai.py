@@ -23,6 +23,7 @@ class OpenAIAdapter(ModelAdapter):
                 json={
                     "model": api_model,
                     "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": get_settings().completion_max_tokens,
                     "temperature": 0.2,
                 },
                 timeout=timeout,

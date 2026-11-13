@@ -1,17 +1,20 @@
+import json
+
 from fastapi import Depends, FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import get_db, init_db
-from app.engine import handle_complete
+from app.engine import handle_complete, stream_complete
 from app.eval_runner import run_eval
 from app.registry import load_models, load_routing
-from app.router import rank_models
+from app.router import rank_models_detailed
 from app.schemas import CompleteRequest, EvalRunRequest
 from app.stats import by_model, by_task, latest_eval, overview, recent_requests
 
-app = FastAPI(title="LLM Orchestration Engine", version="0.1.0")
+app = FastAPI(title="LLM Orchestration Engine", version="0.2.0")
 settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
@@ -37,6 +40,25 @@ def complete(body: CompleteRequest, db: Session = Depends(get_db)):
     return handle_complete(db, body)
 
 
+@app.post("/v1/complete/stream")
+def complete_stream(body: CompleteRequest, db: Session = Depends(get_db)):
+    """NDJSON stream of routing theater events, ending with event=final."""
+
+    def generate():
+        for event, payload in stream_complete(db, body):
+            line = json.dumps({"event": event, "data": payload}, default=str)
+            yield line + "\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="application/x-ndjson",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @app.get("/v1/models")
 def models():
     routing = load_routing()
@@ -54,17 +76,27 @@ def models():
                 "enabled": spec.enabled,
             }
         )
-    return {"baseline_model": routing.baseline_model, "weights": {
-        "quality": routing.quality,
-        "cost": routing.cost,
-        "latency": routing.latency,
-    }, "models": items}
+    return {
+        "baseline_model": routing.baseline_model,
+        "weights": {
+            "quality": routing.quality,
+            "cost": routing.cost,
+            "latency": routing.latency,
+        },
+        "models": items,
+        "quality_label": "heuristic quality proxy",
+    }
 
 
 @app.get("/v1/rank")
 def rank(task_type: str = Query(default="qa")):
-    ranked = [{"id": spec.id, "score": round(score, 4), "provider": spec.provider} for spec, score in rank_models(task_type)]
-    return {"task_type": task_type, "ranked": ranked}
+    detailed = rank_models_detailed(task_type, include_unavailable=True)
+    return {
+        "task_type": task_type,
+        "ranked": [row.model_dump() for row in detailed if row.eligible],
+        "scoreboard": [row.model_dump() for row in detailed],
+        "formula": "score = w_q*strength - w_c*cost_norm - w_l*latency_norm",
+    }
 
 
 @app.get("/v1/stats/overview")

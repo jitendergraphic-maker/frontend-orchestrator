@@ -2,11 +2,10 @@ from app.classifier import classify
 from app.adapters.base import AdapterResult
 from app.adapters.groq import GroqAdapter
 from app.adapters.nvidia import NvidiaAdapter
-from app.adapters.ollama import OllamaAdapter
 from app.fallback import complete_with_fallback
 from app.quality import quality_score
 from app.registry import load_models
-from app.router import provider_available, rank_models
+from app.router import provider_available, rank_models, rank_models_detailed
 
 
 def test_classifier_hint_and_rules():
@@ -22,22 +21,32 @@ def test_classifier_hint_and_rules():
 
 
 def test_rank_uses_only_configured_real_models(monkeypatch):
-    monkeypatch.setattr("app.router.provider_available", lambda spec: True)
+    monkeypatch.setattr(
+        "app.router.provider_status", lambda spec: (True, None)
+    )
     ranked = [spec.id for spec, _ in rank_models("code")]
     assert set(ranked) == {
-        "llama-3.1-8b-instant",
-        "llama-3.3-70b-versatile",
-        "llama3.2:1b",
-        "nvidia-llama-3.1-8b",
-        "nvidia-llama-3.3-70b",
-        "nvidia-nemotron-70b",
+        "groq-gpt-oss-20b",
+        "groq-gpt-oss-120b",
+        "groq-qwen3-27b",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash",
+        "gemini-3.6-flash",
+        "nvidia-llama-3.2-11b",
+        "nvidia-glm-5.3-flash",
+        "or-lfm-2.5-free",
+        "or-nemotron-lightning-free",
+        "or-auto-free",
+        "or-laguna-xs-free",
+        "or-north-mini-code-free",
+        "or-laguna-s-free",
     }
 
 
 def test_groq_requires_api_key(monkeypatch):
     settings = type("Settings", (), {"groq_api_key": ""})()
     monkeypatch.setattr("app.router.get_settings", lambda: settings)
-    groq_model = load_models()["llama-3.1-8b-instant"]
+    groq_model = load_models()["groq-gpt-oss-20b"]
 
     assert not provider_available(groq_model)
     settings.groq_api_key = "configured"
@@ -47,11 +56,21 @@ def test_groq_requires_api_key(monkeypatch):
 def test_nvidia_requires_api_key(monkeypatch):
     settings = type("Settings", (), {"nvidia_api_key": ""})()
     monkeypatch.setattr("app.router.get_settings", lambda: settings)
-    nvidia_model = load_models()["nvidia-llama-3.1-8b"]
+    nvidia_model = load_models()["nvidia-llama-3.2-11b"]
 
     assert not provider_available(nvidia_model)
     settings.nvidia_api_key = "configured"
     assert provider_available(nvidia_model)
+
+
+def test_gemini_requires_api_key(monkeypatch):
+    settings = type("Settings", (), {"gemini_api_key": ""})()
+    monkeypatch.setattr("app.router.get_settings", lambda: settings)
+    gemini_model = load_models()["gemini-3.5-flash-lite"]
+
+    assert not provider_available(gemini_model)
+    settings.gemini_api_key = "configured"
+    assert provider_available(gemini_model)
 
 
 def test_nvidia_adapter_uses_openai_compatible_endpoint(monkeypatch):
@@ -72,12 +91,14 @@ def test_nvidia_adapter_uses_openai_compatible_endpoint(monkeypatch):
 
     monkeypatch.setattr(
         "app.adapters.nvidia.get_settings",
-        lambda: type("Settings", (), {"nvidia_api_key": "test-key"})(),
+        lambda: type(
+            "Settings", (), {"nvidia_api_key": "test-key", "completion_max_tokens": 1536}
+        )(),
     )
     monkeypatch.setattr("app.adapters.nvidia.httpx.post", post)
 
     result = NvidiaAdapter().complete(
-        api_model="meta/llama-3.1-8b-instruct", prompt="Question", timeout=5
+        api_model="meta/llama-3.2-11b-vision-instruct", prompt="Question", timeout=5
     )
 
     assert result.output == "A concise answer"
@@ -85,35 +106,7 @@ def test_nvidia_adapter_uses_openai_compatible_endpoint(monkeypatch):
         "https://integrate.api.nvidia.com/v1/chat/completions"
     )
     assert request["headers"]["Authorization"] == "Bearer test-key"
-    assert request["json"]["model"] == "meta/llama-3.1-8b-instruct"
-
-
-def test_ollama_requires_installed_model(monkeypatch):
-    settings = type(
-        "Settings",
-        (),
-        {
-            "ollama_base_url": "http://localhost:11434",
-            "groq_api_key": "",
-        },
-    )()
-    monkeypatch.setattr("app.router.get_settings", lambda: settings)
-    response = type(
-        "Response",
-        (),
-        {
-            "status_code": 200,
-            "json": lambda self: {"models": [{"name": "llama3.2:1b"}]},
-        },
-    )()
-    monkeypatch.setattr(
-        "app.router.httpx.get", lambda *args, **kwargs: response
-    )
-
-    local_model = load_models()["llama3.2:1b"]
-    groq_model = load_models()["llama-3.1-8b-instant"]
-    assert provider_available(local_model)
-    assert not provider_available(groq_model)
+    assert request["json"]["model"] == "meta/llama-3.2-11b-vision-instruct"
 
 
 def test_quality_empty_is_zero():
@@ -135,11 +128,11 @@ def test_fallback_continues_after_unexpected_adapter_error(monkeypatch):
     outcome = complete_with_fallback(
         "What is HTTP?",
         "qa",
-        ranked=[models["llama-3.3-70b-versatile"], models["llama3.2:1b"]],
+        ranked=[models["groq-gpt-oss-20b"], models["nvidia-llama-3.2-11b"]],
     )
 
-    assert calls == ["llama-3.3-70b-versatile", "llama3.2:1b"]
-    assert outcome.spec.id == "llama3.2:1b"
+    assert calls == ["groq-gpt-oss-20b", "nvidia-llama-3.2-11b"]
+    assert outcome.spec.id == "nvidia-llama-3.2-11b"
     assert outcome.fallback_used is True
 
 
@@ -173,13 +166,15 @@ def test_groq_retries_rate_limit_once(monkeypatch):
 
     monkeypatch.setattr(
         "app.adapters.groq.get_settings",
-        lambda: type("Settings", (), {"groq_api_key": "test-key"})(),
+        lambda: type(
+            "Settings", (), {"groq_api_key": "test-key", "completion_max_tokens": 1536}
+        )(),
     )
     monkeypatch.setattr("app.adapters.groq.httpx.post", post)
     monkeypatch.setattr("app.adapters.groq.time.sleep", sleeps.append)
 
     result = GroqAdapter().complete(
-        api_model="llama-3.1-8b-instant", prompt="Write reverse", timeout=5
+        api_model="openai/gpt-oss-20b", prompt="Write reverse", timeout=5
     )
 
     assert result.output.startswith("def reverse")
@@ -190,36 +185,79 @@ def test_groq_retries_rate_limit_once(monkeypatch):
         "https://api.groq.com/openai/v1/chat/completions",
     ]
     assert requests[0]["headers"]["Authorization"] == "Bearer test-key"
-    assert requests[0]["json"]["max_tokens"] == 512
+    assert requests[0]["json"]["max_tokens"] == 1536
 
 
-def test_ollama_uses_long_timeout_and_generation_limit(monkeypatch):
-    class Response:
-        status_code = 200
+def test_strict_baseline_never_calls_second_model(monkeypatch):
+    calls = []
 
-        def json(self):
-            return {
-                "message": {
-                    "content": "def reverse(value): return value[::-1]"
-                }
-            }
+    def call(spec, prompt):
+        calls.append(spec.id)
+        raise RuntimeError("baseline provider down")
 
-    request = {}
-
-    def post(url, **kwargs):
-        request.update(url=url, **kwargs)
-        return Response()
-
-    settings = type(
-        "Settings", (), {"ollama_base_url": "http://localhost:11434"}
-    )()
-    monkeypatch.setattr("app.adapters.ollama.get_settings", lambda: settings)
-    monkeypatch.setattr("app.adapters.ollama.httpx.post", post)
-
-    result = OllamaAdapter().complete(
-        api_model="llama3.2:1b", prompt="Write reverse", timeout=1
+    monkeypatch.setattr("app.fallback._call", call)
+    models = load_models()
+    outcome = complete_with_fallback(
+        "What is HTTP?",
+        "qa",
+        ranked=[models["groq-gpt-oss-20b"], models["nvidia-llama-3.2-11b"]],
+        allow_fallback=False,
     )
 
-    assert result.output.startswith("def reverse")
-    assert request["timeout"] == 120
-    assert request["json"]["options"]["num_predict"] == 512
+    assert calls == ["groq-gpt-oss-20b"]
+    assert outcome.success is False
+    assert outcome.fallback_used is False
+    assert len(outcome.attempts) == 1
+    assert outcome.attempts[0].outcome == "error"
+
+
+def test_attempt_trace_records_fallback_chain(monkeypatch):
+    def call(spec, prompt):
+        if spec.id == "groq-gpt-oss-20b":
+            raise RuntimeError("timeout")
+        return AdapterResult("ok", 4, 2, 18)
+
+    monkeypatch.setattr("app.fallback._call", call)
+    models = load_models()
+    outcome = complete_with_fallback(
+        "What is HTTP?",
+        "qa",
+        ranked=[models["groq-gpt-oss-20b"], models["nvidia-llama-3.2-11b"]],
+    )
+
+    assert [a.outcome for a in outcome.attempts] == ["error", "success"]
+    assert outcome.attempts[0].reason == "timeout"
+    assert outcome.attempts[1].model == "nvidia-llama-3.2-11b"
+    assert outcome.fallback_used is True
+
+
+def test_scoreboard_finite_and_deterministic(monkeypatch):
+    monkeypatch.setattr(
+        "app.router.provider_status", lambda spec: (True, None)
+    )
+    a = rank_models_detailed("code")
+    b = rank_models_detailed("code")
+    assert [row.id for row in a] == [row.id for row in b]
+    for row in a:
+        assert row.eligible
+        assert row.score == row.score  # not NaN
+        assert abs(row.score) != float("inf")
+        assert 0.0 <= row.cost_norm <= 1.0
+        assert 0.0 <= row.latency_norm <= 1.0
+
+
+def test_fallback_attempt_trace_on_success_path(monkeypatch):
+    monkeypatch.setattr(
+        "app.fallback._call",
+        lambda spec, prompt: AdapterResult("hello world answer", 3, 5, 12),
+    )
+    models = load_models()
+    outcome = complete_with_fallback(
+        "Hi",
+        "qa",
+        ranked=[models["nvidia-llama-3.2-11b"]],
+    )
+    assert outcome.success is True
+    assert len(outcome.attempts) == 1
+    assert outcome.attempts[0].outcome == "success"
+    assert outcome.attempts[0].est_cost >= 0.0

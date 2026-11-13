@@ -1,11 +1,14 @@
 weights:
-  quality: 0.55
-  cost: 0.30
+  quality: 0.65
+  cost: 0.20
   latency: 0.15
 
-baseline_model: llama-3.3-70b-versatile
+baseline_model: groq-gpt-oss-20b
 
 prefer_mock_when_no_keys: false
 
-timeout_seconds: 20
+timeout_seconds: 60
 max_fallback_attempts: 3
+
+# Orchestra specialist diversity: switch provider when alt score is within margin of top.
+diversity_score_margin: 0.12

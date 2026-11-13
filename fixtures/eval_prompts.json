@@ -28,5 +28,19 @@
   {"id": "cre-3", "task_type": "creative", "prompt": "Invent a product name and one-sentence pitch for a coffee shop for databases."},
   {"id": "cre-4", "task_type": "creative", "prompt": "Write a tiny fable where latency beats cost in a race, then loses."},
   {"id": "cre-5", "task_type": "creative", "prompt": "Write a haiku about PostgreSQL request logs."},
-  {"id": "cre-6", "task_type": "creative", "prompt": "Write a two-sentence sci-fi blurb about routing thoughts through cheaper brains."}
+  {"id": "cre-6", "task_type": "creative", "prompt": "Write a two-sentence sci-fi blurb about routing thoughts through cheaper brains."},
+  {"id": "dbg-1", "task_type": "debug", "prompt": "Fix this TypeError: 'NoneType' object is not subscriptable when indexing user['id']."},
+  {"id": "dbg-2", "task_type": "debug", "prompt": "Debug this failing pytest assertion for reverse_string."},
+  {"id": "math-1", "task_type": "math", "prompt": "Which is larger, 9.11 or 9.8? Explain with place values."},
+  {"id": "math-2", "task_type": "math", "prompt": "Calculate 17 * 24 and show the steps."},
+  {"id": "tr-1", "task_type": "translation", "prompt": "Translate to Spanish: The orchestration engine routes each prompt to a specialist model."},
+  {"id": "tr-2", "task_type": "translation", "prompt": "Translate hello world to French and German."},
+  {"id": "ex-1", "task_type": "extraction", "prompt": "Extract names and emails as a JSON array from: Ada ada@ex.com; Bob bob@ex.com"},
+  {"id": "ex-2", "task_type": "extraction", "prompt": "Extract key-value pairs for model, cost, latency from this log line."},
+  {"id": "an-1", "task_type": "analysis", "prompt": "Compare SQLite vs PostgreSQL for a local demo dashboard — pros and cons."},
+  {"id": "an-2", "task_type": "analysis", "prompt": "Analyze tradeoffs between single-model routing and multi-specialist orchestration."},
+  {"id": "chat-1", "task_type": "chat", "prompt": "Hey there, how are you? Keep it casual."},
+  {"id": "chat-2", "task_type": "chat", "prompt": "Good morning — just checking in with a short friendly reply."},
+  {"id": "vis-1", "task_type": "vision", "prompt": "Describe this screenshot of a routing scoreboard for a teammate who cannot see it."},
+  {"id": "vis-2", "task_type": "vision", "prompt": "What do you see in this diagram of classify → route → fallback?"}
 ]

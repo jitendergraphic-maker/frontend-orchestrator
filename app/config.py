@@ -16,13 +16,19 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     groq_api_key: str = ""
     nvidia_api_key: str = ""
+    openrouter_api_key: str = ""
+    gemini_api_key: str = ""
     ollama_base_url: str = "http://localhost:11434"
     allow_mock_fallback: bool = False
-    baseline_model: str = "llama-3.3-70b-versatile"
+    baseline_model: str = "groq-gpt-oss-20b"
     models_config_path: Path = ROOT / "config" / "models.yaml"
     routing_config_path: Path = ROOT / "config" / "routing.yaml"
     eval_fixture_path: Path = ROOT / "fixtures" / "eval_prompts.json"
-    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    cors_origins: str = (
+        "http://localhost:5173,http://127.0.0.1:5173,"
+        "http://localhost:5174,http://127.0.0.1:5174"
+    )
+    completion_max_tokens: int = 1536
 
 
 @lru_cache

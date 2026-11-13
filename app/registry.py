@@ -32,6 +32,9 @@ class RoutingConfig:
     prefer_mock_when_no_keys: bool
     timeout_seconds: float
     max_fallback_attempts: int
+    # Orchestra: if top model shares a provider already used by another part,
+    # prefer another provider whose score is within this margin of the top.
+    diversity_score_margin: float = 0.08
 
 
 def _load_yaml(path: Path) -> Any:
@@ -74,6 +77,7 @@ def load_routing() -> RoutingConfig:
         prefer_mock_when_no_keys=bool(raw.get("prefer_mock_when_no_keys", True)),
         timeout_seconds=float(raw.get("timeout_seconds", 20)),
         max_fallback_attempts=int(raw.get("max_fallback_attempts", 3)),
+        diversity_score_margin=float(raw.get("diversity_score_margin", 0.08)),
     )
 
 
