@@ -1,4 +1,5 @@
 from app.adapters.anthropic import AnthropicAdapter
+from app.adapters.coarena import CoarenaAdapter
 from app.adapters.gemini import GeminiAdapter
 from app.adapters.groq import GroqAdapter
 from app.adapters.mock import MockAdapter
@@ -14,4 +15,5 @@ ADAPTERS = {
     "nvidia": NvidiaAdapter(),
     "openrouter": OpenRouterAdapter(),
     "gemini": GeminiAdapter(),
+    "coarena": CoarenaAdapter(),
 }

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import queue
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Generator
+from typing import Callable, Generator
 
 from sqlalchemy.orm import Session
 
 from app.adapters.base import AdapterResult
+from app.chat_context import adapter_messages, decompose_input, resolve_prompt
 from app.classifier import classify
 from app.db import RequestLog
 from app.decomposer import decompose, specialist_prompt
@@ -29,8 +31,16 @@ from app.schemas import (
 )
 from app.synthesizer import stitch
 
-QUALITY_LABEL = "heuristic quality proxy"
-ORCHESTRA_CONCURRENCY = 4
+QUALITY_LABEL = "simple quality score"
+ORCHESTRA_CONCURRENCY = 8
+
+
+def _normalize_body(body: CompleteRequest) -> CompleteRequest:
+    """Ensure body.prompt is the latest user turn for logging and legacy call sites."""
+    prompt = resolve_prompt(body)
+    if body.prompt == prompt:
+        return body
+    return body.model_copy(update={"prompt": prompt})
 
 
 def _scoreboard_for(task_type: str) -> list[ScoreBreakdown]:
@@ -171,6 +181,7 @@ def _run_part(
     original: str,
     siblings: list[str],
     ranked: list[ModelSpec] | None = None,
+    on_event: Callable[[str, dict], None] | None = None,
 ) -> PartOutput:
     if ranked is None:
         ranked, allow_fallback, force = _resolve_ranked_for_task(
@@ -179,16 +190,19 @@ def _run_part(
     else:
         allow_fallback = True
         force = body.force_model if body.force_model in load_models() else None
-    prompt = specialist_prompt(
+    specialist = specialist_prompt(
         part, original=original, sibling_summaries=siblings
     )
     scoreboard = _scoreboard_for(part.task_type)
+    msgs = adapter_messages(body, override_user=specialist)
     outcome = complete_with_fallback(
-        prompt,
+        specialist,
         part.task_type,
         force_model=force,
         ranked=ranked,
         allow_fallback=allow_fallback,
+        messages=msgs,
+        on_event=on_event,
     )
     return PartOutput(
         part_id=part.id,
@@ -278,7 +292,8 @@ def _aggregate_orchestra(
 def handle_orchestra(
     db: Session, body: CompleteRequest, *, eval_run_id: str | None = None
 ) -> CompleteResponse:
-    parts = decompose(body.prompt, body.task_type)
+    body = _normalize_body(body)
+    parts = decompose(decompose_input(body), body.task_type)
     sibling_summaries = [
         f"{p.id} [{p.task_type}]: {p.text[:80]}{'…' if len(p.text) > 80 else ''}"
         for p in parts
@@ -325,7 +340,9 @@ def handle_orchestra(
 def stream_orchestra(
     db: Session, body: CompleteRequest
 ) -> Generator[tuple[str, dict], None, None]:
-    parts = decompose(body.prompt, body.task_type)
+    """Stream orchestra events while running specialty parts in parallel."""
+    body = _normalize_body(body)
+    parts = decompose(decompose_input(body), body.task_type)
     yield (
         "decomposed",
         {
@@ -338,19 +355,13 @@ def stream_orchestra(
         f"{p.id} [{p.task_type}]: {p.text[:80]}{'…' if len(p.text) > 80 else ''}"
         for p in parts
     ]
-    started = time.perf_counter()
-    part_outputs: list[PartOutput] = []
-    used_providers: set[str] = set()
+    rankings = _assign_orchestra_rankings(body, parts)
 
-    # Sequential in stream path so theater can show live part events;
-    # still honest timing (no fake parallel animation).
+    # Emit all rankings first so the UI can show preferred models immediately.
     for part in parts:
-        siblings = [s for s in sibling_summaries if not s.startswith(f"{part.id} ")]
+        ranked = rankings.get(part.id) or []
         scored = rank_models(part.task_type)
         raw_top_id = scored[0][0].id if scored else None
-        ranked, allow_fallback, force = _resolve_ranked_for_task(
-            body, part.task_type, used_providers=used_providers
-        )
         scoreboard = _scoreboard_for(part.task_type)
         yield (
             "part_ranked",
@@ -365,53 +376,73 @@ def stream_orchestra(
                 ),
             },
         )
-        prompt = specialist_prompt(
-            part, original=body.prompt, sibling_summaries=siblings
-        )
-        if ranked:
-            used_providers.add(ranked[0].provider)
-        gen = iter_complete_with_fallback(
-            prompt,
-            part.task_type,
-            force_model=force,
-            ranked=ranked,
-            allow_fallback=allow_fallback,
-        )
-        outcome: CompletionOutcome | None = None
-        try:
-            while True:
-                event, payload = next(gen)
-                enriched = dict(payload)
-                enriched["part_id"] = part.id
-                if event == "attempt_start":
-                    yield ("part_attempt_start", enriched)
-                elif event == "attempt_end":
-                    yield ("part_attempt_end", enriched)
-                else:
-                    yield (event, enriched)
-        except StopIteration as stop:
-            outcome = stop.value
-        if outcome is None:
-            raise RuntimeError(f"part {part.id} produced no outcome")
 
-        part_out = PartOutput(
-            part_id=part.id,
-            task_type=part.task_type,
-            text=outcome.result.output if outcome.success else "",
-            model=outcome.spec.id,
-            provider=outcome.spec.provider,
-            success=outcome.success,
-            tokens_in=outcome.result.tokens_in,
-            tokens_out=outcome.result.tokens_out,
-            est_cost=round(outcome.est_cost, 6),
-            latency_ms=outcome.result.latency_ms,
-            attempts=_tag_attempts(outcome.attempts, part.id),
-            ranked=outcome.ranked_ids,
-            scoreboard=scoreboard,
-            error=outcome.error,
-        )
-        part_outputs.append(part_out)
-        yield ("part_done", part_out.model_dump())
+    started = time.perf_counter()
+    event_q: queue.Queue[tuple[str, dict] | None] = queue.Queue()
+    workers = min(ORCHESTRA_CONCURRENCY, max(1, len(parts)))
+
+    def worker(part: PromptPart) -> None:
+        siblings = [s for s in sibling_summaries if not s.startswith(f"{part.id} ")]
+
+        def on_event(event: str, payload: dict) -> None:
+            enriched = dict(payload)
+            enriched["part_id"] = part.id
+            if event == "attempt_start":
+                event_q.put(("part_attempt_start", enriched))
+            elif event == "attempt_end":
+                event_q.put(("part_attempt_end", enriched))
+
+        try:
+            part_out = _run_part(
+                body,
+                part,
+                original=body.prompt,
+                siblings=siblings,
+                ranked=rankings.get(part.id),
+                on_event=on_event,
+            )
+            event_q.put(("part_done", part_out.model_dump()))
+        except Exception as exc:  # noqa: BLE001 — surface to stream consumer
+            event_q.put(
+                (
+                    "part_done",
+                    PartOutput(
+                        part_id=part.id,
+                        task_type=part.task_type,
+                        text="",
+                        model="",
+                        provider="",
+                        success=False,
+                        error=str(exc),
+                    ).model_dump(),
+                )
+            )
+
+    part_outputs: list[PartOutput] = []
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = [pool.submit(worker, p) for p in parts]
+        done_parts = 0
+        while done_parts < len(parts):
+            try:
+                item = event_q.get(timeout=0.05)
+            except queue.Empty:
+                # Propagate worker crashes early if the queue is idle.
+                for fut in futures:
+                    if fut.done() and fut.exception() is not None:
+                        fut.result()
+                continue
+            if item is None:
+                continue
+            event_name, payload = item
+            yield (event_name, payload)
+            if event_name == "part_done":
+                done_parts += 1
+                part_outputs.append(PartOutput.model_validate(payload))
+        for fut in futures:
+            fut.result()
+
+    by_id = {o.part_id: o for o in part_outputs}
+    part_outputs = [by_id[p.id] for p in parts if p.id in by_id]
 
     wall_ms = int((time.perf_counter() - started) * 1000)
     outcome, scoreboard, q, task_label = _aggregate_orchestra(
@@ -451,18 +482,21 @@ def stream_orchestra(
 def handle_complete(
     db: Session, body: CompleteRequest, *, eval_run_id: str | None = None
 ) -> CompleteResponse:
+    body = _normalize_body(body)
     if body.policy == "orchestra":
         return handle_orchestra(db, body, eval_run_id=eval_run_id)
 
-    task_type = classify(body.prompt, body.task_type)
+    task_type = classify(decompose_input(body), body.task_type)
     scoreboard = _scoreboard_for(task_type)
     ranked, allow_fallback, force = _resolve_ranked_for_task(body, task_type)
+    msgs = adapter_messages(body)
     outcome = complete_with_fallback(
         body.prompt,
         task_type,
         force_model=force,
         ranked=ranked,
         allow_fallback=allow_fallback,
+        messages=msgs,
     )
     q = _quality_for(outcome, body.prompt, task_type)
     _persist(db, body, task_type, outcome, q, eval_run_id=eval_run_id)
@@ -473,11 +507,12 @@ def stream_complete(
     db: Session, body: CompleteRequest
 ) -> Generator[tuple[str, dict], None, None]:
     """Yield (event_name, payload) including live attempt_start before each provider call."""
+    body = _normalize_body(body)
     if body.policy == "orchestra":
         yield from stream_orchestra(db, body)
         return
 
-    task_type = classify(body.prompt, body.task_type)
+    task_type = classify(decompose_input(body), body.task_type)
     yield ("classified", {"task_type": task_type, "hint": body.task_type})
 
     scoreboard = _scoreboard_for(task_type)
@@ -490,12 +525,14 @@ def stream_complete(
     )
 
     ranked, allow_fallback, force = _resolve_ranked_for_task(body, task_type)
+    msgs = adapter_messages(body)
     gen = iter_complete_with_fallback(
         body.prompt,
         task_type,
         force_model=force,
         ranked=ranked,
         allow_fallback=allow_fallback,
+        messages=msgs,
     )
     outcome: CompletionOutcome | None = None
     try:

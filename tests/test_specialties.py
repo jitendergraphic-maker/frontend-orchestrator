@@ -45,40 +45,76 @@ def test_specialty_winners_in_top3(monkeypatch):
 
     assert any(
         m in _top_ids("code")
-        for m in ("or-north-mini-code-free", "or-laguna-s-free", "groq-qwen3-27b")
+        for m in ("ca-claude-sonnet-5-5", "ca-claude-opus-5-5", "ca-gpt-6-1-terra", "ca-mimo-v2-6-pro")
     )
     assert any(
         m in _top_ids("debug")
-        for m in ("or-north-mini-code-free", "or-laguna-s-free")
+        for m in ("ca-claude-sonnet-5-5", "ca-claude-opus-5-5", "ca-mimo-v2-6-pro")
     )
     assert any(
         m in _top_ids("math")
-        for m in ("nvidia-glm-5.3-flash", "or-nemotron-lightning-free", "groq-qwen3-27b")
+        for m in ("ca-glm-5-3-flash", "ca-deepseek-v4-1-flash")
     )
     assert any(
         m in _top_ids("reasoning")
-        for m in ("groq-gpt-oss-120b", "or-nemotron-lightning-free", "nvidia-glm-5.3-flash")
+        for m in ("ca-claude-opus-5-5", "ca-kimi-k3-1-pro", "ca-deepseek-v4-1-flash")
     )
-    assert any(m in _top_ids("qa") for m in ("gemini-3.6-flash", "nvidia-llama-3.2-11b"))
+    assert any(
+        m in _top_ids("qa")
+        for m in ("ca-gemini-3-8-flash", "ca-gpt-6-1-sol", "ca-gemini-4-carbon")
+    )
     assert any(
         m in _top_ids("summarization")
-        for m in ("gemini-3.6-flash", "gemini-3.5-flash-lite")
+        for m in ("ca-claude-haiku-5-5", "ca-gpt-6-luna", "ca-gemini-3-8-flash")
     )
-    assert "gemini-3.5-flash" in _top_ids("creative")
-    assert any(m in _top_ids("translation") for m in ("groq-qwen3-27b", "gemini-3.6-flash"))
+    assert any(
+        m in _top_ids("creative")
+        for m in (
+            "ca-minimax-m3-1-flash",
+            "ca-grok-4-7",
+            "ca-claude-fable-5-2",
+            "ca-gpt-6-astra",
+        )
+    )
+    assert "ca-hy4" in _top_ids("translation")
     assert any(
         m in _top_ids("extraction")
-        for m in ("or-nemotron-lightning-free", "or-laguna-s-free")
+        for m in ("ca-hy4", "ca-claude-haiku-5-5")
     )
     assert any(
         m in _top_ids("analysis")
-        for m in ("or-nemotron-lightning-free", "groq-gpt-oss-120b")
+        for m in (
+            "ca-glm-5-3-flash",
+            "ca-deepseek-v4-1-flash",
+            "ca-gemini-3-8-flash",
+            "ca-gemini-4-argon",
+            "ca-claude-opus-5-5",
+        )
     )
     assert any(
         m in _top_ids("chat")
-        for m in ("or-lfm-2.5-free", "gemini-3.5-flash-lite", "groq-gpt-oss-20b")
+        for m in ("ca-claude-haiku-5-5", "ca-gpt-6-luna", "ca-gemini-3-8-flash")
     )
-    assert "nvidia-llama-3.2-11b" in _top_ids("vision")
+    assert any(
+        m in _top_ids("vision")
+        for m in ("ca-gemini-4-carbon", "ca-gemini-4-argon", "ca-gemini-3-8-flash")
+    )
+    # Every specialty's top pick is CoArena when the key is present
+    for task in (
+        "qa",
+        "code",
+        "debug",
+        "math",
+        "reasoning",
+        "summarization",
+        "creative",
+        "translation",
+        "extraction",
+        "analysis",
+        "chat",
+        "vision",
+    ):
+        assert _top_ids(task, 1)[0].startswith("ca-"), task
 
 
 def test_code_specialist_outranks_gemini_generalist(monkeypatch):
@@ -86,7 +122,8 @@ def test_code_specialist_outranks_gemini_generalist(monkeypatch):
     load_models.cache_clear()
     load_routing.cache_clear()
     ranked = [spec.id for spec, _ in rank_models("code")]
-    assert ranked.index("or-north-mini-code-free") < ranked.index("gemini-3.6-flash")
+    assert ranked.index("ca-claude-sonnet-5-5") < ranked.index("gemini-3.6-flash")
+    assert ranked.index("ca-claude-sonnet-5-5") < ranked.index("or-north-mini-code-free")
 
 
 def test_classify_new_task_types():

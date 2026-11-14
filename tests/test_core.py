@@ -1,5 +1,6 @@
 from app.classifier import classify
-from app.adapters.base import AdapterResult
+from app.adapters.base import AdapterError, AdapterResult
+from app.adapters.coarena import CoarenaAdapter
 from app.adapters.groq import GroqAdapter
 from app.adapters.nvidia import NvidiaAdapter
 from app.fallback import complete_with_fallback
@@ -24,23 +25,14 @@ def test_rank_uses_only_configured_real_models(monkeypatch):
     monkeypatch.setattr(
         "app.router.provider_status", lambda spec: (True, None)
     )
-    ranked = [spec.id for spec, _ in rank_models("code")]
-    assert set(ranked) == {
-        "groq-gpt-oss-20b",
-        "groq-gpt-oss-120b",
-        "groq-qwen3-27b",
-        "gemini-3.5-flash-lite",
-        "gemini-3.5-flash",
-        "gemini-3.6-flash",
-        "nvidia-llama-3.2-11b",
-        "nvidia-glm-5.3-flash",
-        "or-lfm-2.5-free",
-        "or-nemotron-lightning-free",
-        "or-auto-free",
-        "or-laguna-xs-free",
-        "or-north-mini-code-free",
-        "or-laguna-s-free",
+    catalog = {
+        mid
+        for mid, spec in load_models().items()
+        if spec.enabled and spec.provider != "mock"
     }
+    ranked = [spec.id for spec, _ in rank_models("code")]
+    assert set(ranked) == catalog
+    assert any(mid.startswith("ca-") for mid in ranked)
 
 
 def test_groq_requires_api_key(monkeypatch):
@@ -71,6 +63,104 @@ def test_gemini_requires_api_key(monkeypatch):
     assert not provider_available(gemini_model)
     settings.gemini_api_key = "configured"
     assert provider_available(gemini_model)
+
+
+def test_coarena_requires_api_key(monkeypatch):
+    settings = type("Settings", (), {"coarena_api_key": ""})()
+    monkeypatch.setattr("app.router.get_settings", lambda: settings)
+    coarena_model = load_models()["ca-claude-sonnet-5-5"]
+
+    assert not provider_available(coarena_model)
+    settings.coarena_api_key = "coa_test"
+    assert provider_available(coarena_model)
+
+
+def test_coarena_adapter_mocked_complete(monkeypatch):
+    class Response:
+        status_code = 200
+
+        def json(self):
+            return {
+                "choices": [{"message": {"content": "coarena ok"}}],
+                "usage": {"prompt_tokens": 4, "completion_tokens": 2},
+            }
+
+    request = {}
+
+    def post(url, **kwargs):
+        request.update(url=url, **kwargs)
+        return Response()
+
+    monkeypatch.setattr(
+        "app.adapters.coarena.get_settings",
+        lambda: type(
+            "Settings",
+            (),
+            {"coarena_api_key": "coa_test", "completion_max_tokens": 1536},
+        )(),
+    )
+    monkeypatch.setattr("app.adapters.coarena.httpx.post", post)
+
+    result = CoarenaAdapter().complete(
+        api_model="claude-sonnet-5-5", prompt="hi", timeout=5
+    )
+
+    assert result.output == "coarena ok"
+    assert request["url"] == "https://coarena.ai/api/v1/chat/completions"
+    assert request["headers"]["Authorization"] == "Bearer coa_test"
+    assert request["json"]["model"] == "claude-sonnet-5-5"
+
+
+def test_coarena_adapter_missing_key_raises(monkeypatch):
+    monkeypatch.setattr(
+        "app.adapters.coarena.get_settings",
+        lambda: type("Settings", (), {"coarena_api_key": ""})(),
+    )
+    try:
+        CoarenaAdapter().complete(api_model="claude-haiku-5-5", prompt="x", timeout=1)
+        assert False, "expected AdapterError"
+    except AdapterError as exc:
+        assert "COARENA_API_KEY" in str(exc)
+
+
+def test_rank_prefers_coarena_when_key_present(monkeypatch):
+    def status(spec):
+        if spec.provider == "coarena":
+            return True, None
+        if spec.provider == "mock":
+            return False, "mock_excluded"
+        # Keep a few non-CoArena peers eligible so ranking has real fallbacks
+        if spec.provider in ("groq", "gemini", "openrouter", "nvidia"):
+            return True, None
+        return False, "unsupported_provider"
+
+    monkeypatch.setattr("app.router.provider_status", status)
+
+    for task, prefix_ok in (
+        ("code", "ca-"),
+        ("math", "ca-"),
+        ("creative", "ca-"),
+    ):
+        top = rank_models(task)[0][0]
+        assert top.id.startswith(prefix_ok), f"{task} top was {top.id}"
+        assert top.provider == "coarena"
+
+
+def test_rank_without_coarena_key_uses_existing_providers(monkeypatch):
+    def status(spec):
+        if spec.provider == "coarena":
+            return False, "missing_credentials"
+        if spec.provider == "mock":
+            return False, "mock_excluded"
+        if spec.provider in ("groq", "gemini", "openrouter", "nvidia"):
+            return True, None
+        return False, "unsupported_provider"
+
+    monkeypatch.setattr("app.router.provider_status", status)
+    ranked = [spec for spec, _ in rank_models("code")]
+    assert ranked
+    assert all(spec.provider != "coarena" for spec in ranked)
+    assert ranked[0].provider in ("groq", "gemini", "openrouter", "nvidia")
 
 
 def test_nvidia_adapter_uses_openai_compatible_endpoint(monkeypatch):
@@ -117,7 +207,7 @@ def test_quality_empty_is_zero():
 def test_fallback_continues_after_unexpected_adapter_error(monkeypatch):
     calls = []
 
-    def call(spec, prompt):
+    def call(spec, prompt, *, messages=None):
         calls.append(spec.id)
         if len(calls) == 1:
             raise RuntimeError("provider response could not be parsed")
@@ -191,7 +281,7 @@ def test_groq_retries_rate_limit_once(monkeypatch):
 def test_strict_baseline_never_calls_second_model(monkeypatch):
     calls = []
 
-    def call(spec, prompt):
+    def call(spec, prompt, *, messages=None):
         calls.append(spec.id)
         raise RuntimeError("baseline provider down")
 
@@ -212,7 +302,7 @@ def test_strict_baseline_never_calls_second_model(monkeypatch):
 
 
 def test_attempt_trace_records_fallback_chain(monkeypatch):
-    def call(spec, prompt):
+    def call(spec, prompt, *, messages=None):
         if spec.id == "groq-gpt-oss-20b":
             raise RuntimeError("timeout")
         return AdapterResult("ok", 4, 2, 18)
@@ -249,7 +339,7 @@ def test_scoreboard_finite_and_deterministic(monkeypatch):
 def test_fallback_attempt_trace_on_success_path(monkeypatch):
     monkeypatch.setattr(
         "app.fallback._call",
-        lambda spec, prompt: AdapterResult("hello world answer", 3, 5, 12),
+        lambda spec, prompt, *, messages=None: AdapterResult("hello world answer", 3, 5, 12),
     )
     models = load_models()
     outcome = complete_with_fallback(

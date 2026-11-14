@@ -25,13 +25,21 @@ class CompletionOutcome:
     success: bool = True
 
 
-def _call(spec: ModelSpec, prompt: str) -> AdapterResult:
+def _call(
+    spec: ModelSpec,
+    prompt: str,
+    *,
+    messages: list[dict] | None = None,
+) -> AdapterResult:
     adapter = ADAPTERS.get(spec.provider)
     if adapter is None:
         raise AdapterError(f"no adapter for provider {spec.provider}")
     timeout = load_routing().timeout_seconds
     return adapter.complete(
-        api_model=spec.api_model, prompt=prompt, timeout=timeout
+        api_model=spec.api_model,
+        prompt=prompt,
+        timeout=timeout,
+        messages=messages,
     )
 
 
@@ -42,6 +50,7 @@ def iter_complete_with_fallback(
     force_model: str | None = None,
     ranked: list[ModelSpec] | None = None,
     allow_fallback: bool = True,
+    messages: list[dict] | None = None,
 ) -> Generator[tuple[str, dict], None, CompletionOutcome]:
     """Yield attempt events, then return CompletionOutcome via StopIteration.value.
 
@@ -71,7 +80,7 @@ def iter_complete_with_fallback(
             {"index": i, "model": spec.id, "provider": spec.provider},
         )
         try:
-            result = _call(spec, prompt)
+            result = _call(spec, prompt, messages=messages)
             cost = estimate_cost(spec, result.tokens_in, result.tokens_out)
             if looks_low_confidence(result.output):
                 last_error = "low-confidence output"
@@ -208,6 +217,7 @@ def complete_with_fallback(
     ranked: list[ModelSpec] | None = None,
     allow_fallback: bool = True,
     on_event: Optional[Callable[[str, dict], None]] = None,
+    messages: list[dict] | None = None,
 ) -> CompletionOutcome:
     gen = iter_complete_with_fallback(
         prompt,
@@ -215,6 +225,7 @@ def complete_with_fallback(
         force_model=force_model,
         ranked=ranked,
         allow_fallback=allow_fallback,
+        messages=messages,
     )
     try:
         while True:

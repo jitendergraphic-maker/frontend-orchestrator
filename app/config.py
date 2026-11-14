@@ -5,10 +5,19 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 ROOT = Path(__file__).resolve().parent.parent
+# Absolute paths: uvicorn cwd is backend/, but keys may also live in the repo-root .env.
+_ENV_FILES = (
+    ROOT.parent / ".env",
+    ROOT / ".env",
+)
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=_ENV_FILES,
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     # Postgres in docker-compose; SQLite if Docker/Postgres is not installed.
     database_url: str = "sqlite:///./orchestrator.sqlite"
@@ -18,9 +27,10 @@ class Settings(BaseSettings):
     nvidia_api_key: str = ""
     openrouter_api_key: str = ""
     gemini_api_key: str = ""
+    coarena_api_key: str = ""
     ollama_base_url: str = "http://localhost:11434"
     allow_mock_fallback: bool = False
-    baseline_model: str = "groq-gpt-oss-20b"
+    baseline_model: str = "ca-claude-fable-5"
     models_config_path: Path = ROOT / "config" / "models.yaml"
     routing_config_path: Path = ROOT / "config" / "routing.yaml"
     eval_fixture_path: Path = ROOT / "fixtures" / "eval_prompts.json"

@@ -1,7 +1,13 @@
 from __future__ import annotations
 
 from app.config import get_settings
-from app.registry import ModelSpec, RoutingConfig, load_models, load_routing
+from app.registry import (
+    ModelSpec,
+    RoutingConfig,
+    load_models,
+    load_routing,
+    routing_cost_per_1k,
+)
 from app.schemas import ScoreBreakdown
 
 
@@ -28,6 +34,10 @@ def provider_status(spec: ModelSpec) -> tuple[bool, str | None]:
         if not settings.gemini_api_key:
             return False, "missing_credentials"
         return True, None
+    if spec.provider == "coarena":
+        if not settings.coarena_api_key:
+            return False, "missing_credentials"
+        return True, None
     if spec.provider == "ollama":
         return False, "ollama_disabled"
     if spec.provider in ("openai", "anthropic"):
@@ -52,8 +62,7 @@ def _normalize(values: list[float]) -> list[float]:
 
 def _tie_key(spec: ModelSpec, score: float) -> tuple:
     """Deterministic tie-break: higher score, then lower cost, then id."""
-    cost = spec.input_cost_per_1k + spec.output_cost_per_1k
-    return (-score, cost, spec.id)
+    return (-score, routing_cost_per_1k(spec), spec.id)
 
 
 def rank_models_detailed(
@@ -95,7 +104,7 @@ def rank_models_detailed(
             ]
         return []
 
-    costs = [m.input_cost_per_1k + m.output_cost_per_1k for m in eligible]
+    costs = [routing_cost_per_1k(m) for m in eligible]
     lats = [float(m.typical_latency_ms) for m in eligible]
     cost_n = _normalize(costs)
     lat_n = _normalize(lats)

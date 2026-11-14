@@ -21,6 +21,9 @@ class ModelSpec:
     typical_latency_ms: int
     strengths: dict[str, float]
     enabled: bool = True
+    # False = free-to-us tier (CoArena / Gemini free / OR free). List prices in
+    # input/output_cost_per_1k still drive est_cost for overview economics.
+    billable: bool = True
 
 
 @dataclass(frozen=True)
@@ -58,9 +61,17 @@ def load_models() -> dict[str, ModelSpec]:
             typical_latency_ms=int(item["typical_latency_ms"]),
             strengths={k: float(v) for k, v in item["strengths"].items()},
             enabled=bool(item.get("enabled", True)),
+            billable=bool(item.get("billable", True)),
         )
         models[spec.id] = spec
     return models
+
+
+def routing_cost_per_1k(spec: ModelSpec) -> float:
+    """Cost signal for ranking. Free-to-us models score as $0 even with list prices."""
+    if not spec.billable:
+        return 0.0
+    return spec.input_cost_per_1k + spec.output_cost_per_1k
 
 
 @lru_cache

@@ -3,12 +3,12 @@ weights:
   cost: 0.20
   latency: 0.15
 
-baseline_model: groq-gpt-oss-20b
+baseline_model: ca-claude-fable-5
 
 prefer_mock_when_no_keys: false
 
 timeout_seconds: 60
-max_fallback_attempts: 3
+max_fallback_attempts: 4
 
 # Orchestra specialist diversity: switch provider when alt score is within margin of top.
 diversity_score_margin: 0.12

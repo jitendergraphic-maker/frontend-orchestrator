@@ -1,0 +1,88 @@
+from __future__ import annotations
+
+import threading
+import time
+
+import httpx
+
+from app.adapters.base import AdapterError, AdapterResult, ModelAdapter, normalize_messages
+from app.config import get_settings
+
+# Free-tier CoArena allows 2 concurrent requests per account.
+_COARENA_SLOTS = threading.Semaphore(2)
+
+
+class CoarenaAdapter(ModelAdapter):
+    """OpenAI-compatible client for CoArena Model API (https://coarena.ai/api/v1)."""
+
+    provider = "coarena"
+
+    def complete(
+        self,
+        *,
+        api_model: str,
+        prompt: str,
+        timeout: float,
+        messages: list | None = None,
+    ) -> AdapterResult:
+        key = get_settings().coarena_api_key
+        if not key:
+            raise AdapterError("COARENA_API_KEY is not set")
+
+        chat = normalize_messages(prompt=prompt, messages=messages)
+        prompt_chars = sum(len(m["content"]) for m in chat)
+        started = time.perf_counter()
+        response = None
+
+        acquired = _COARENA_SLOTS.acquire(timeout=max(timeout, 1.0))
+        if not acquired:
+            raise AdapterError("coarena concurrency limit (waited for a free slot)")
+
+        try:
+            for attempt in range(2):
+                try:
+                    response = httpx.post(
+                        "https://coarena.ai/api/v1/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {key}",
+                            "Content-Type": "application/json",
+                        },
+                        json={
+                            "model": api_model,
+                            "messages": chat,
+                            "max_tokens": get_settings().completion_max_tokens,
+                            "temperature": 0.2,
+                        },
+                        timeout=timeout,
+                    )
+                except httpx.TimeoutException as exc:
+                    raise AdapterError("coarena timeout") from exc
+                except httpx.HTTPError as exc:
+                    raise AdapterError(f"coarena transport error: {exc}") from exc
+
+                if response.status_code != 429 or attempt == 1:
+                    break
+                time.sleep(2)
+        finally:
+            _COARENA_SLOTS.release()
+
+        if response is None:
+            raise AdapterError("coarena request failed")
+        if response.status_code >= 400:
+            raise AdapterError(
+                f"coarena {response.status_code}: {response.text[:300]}"
+            )
+
+        data = response.json()
+        output = data["choices"][0]["message"].get("content") or ""
+        usage = data.get("usage") or {}
+        return AdapterResult(
+            output=output,
+            tokens_in=int(
+                usage.get("prompt_tokens") or max(8, prompt_chars // 4)
+            ),
+            tokens_out=int(
+                usage.get("completion_tokens") or max(8, len(output) // 4)
+            ),
+            latency_ms=int((time.perf_counter() - started) * 1000),
+        )

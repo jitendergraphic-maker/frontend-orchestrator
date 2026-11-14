@@ -4,7 +4,7 @@ import time
 
 import httpx
 
-from app.adapters.base import AdapterError, AdapterResult, ModelAdapter
+from app.adapters.base import AdapterError, AdapterResult, ModelAdapter, normalize_messages
 from app.config import get_settings
 
 
@@ -12,12 +12,19 @@ class NvidiaAdapter(ModelAdapter):
     provider = "nvidia"
 
     def complete(
-        self, *, api_model: str, prompt: str, timeout: float
+        self,
+        *,
+        api_model: str,
+        prompt: str,
+        timeout: float,
+        messages: list | None = None,
     ) -> AdapterResult:
         key = get_settings().nvidia_api_key
         if not key:
             raise AdapterError("NVIDIA_API_KEY is not set")
 
+        chat = normalize_messages(prompt=prompt, messages=messages)
+        prompt_chars = sum(len(m["content"]) for m in chat)
         started = time.perf_counter()
         try:
             response = httpx.post(
@@ -25,7 +32,7 @@ class NvidiaAdapter(ModelAdapter):
                 headers={"Authorization": f"Bearer {key}"},
                 json={
                     "model": api_model,
-                    "messages": [{"role": "user", "content": prompt}],
+                    "messages": chat,
                     "max_tokens": get_settings().completion_max_tokens,
                     "temperature": 0.2,
                 },
@@ -47,7 +54,7 @@ class NvidiaAdapter(ModelAdapter):
         return AdapterResult(
             output=output,
             tokens_in=int(
-                usage.get("prompt_tokens") or max(8, len(prompt) // 4)
+                usage.get("prompt_tokens") or max(8, prompt_chars // 4)
             ),
             tokens_out=int(
                 usage.get("completion_tokens") or max(8, len(output) // 4)

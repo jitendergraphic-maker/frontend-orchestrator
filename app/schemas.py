@@ -1,6 +1,6 @@
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 TaskType = Literal[
     "qa",
@@ -19,13 +19,35 @@ TaskType = Literal[
 Policy = Literal["orchestra", "routed", "baseline"]
 AttemptOutcome = Literal["success", "error", "low_confidence"]
 SynthesisMethod = Literal["stitch", "none"]
+ChatRole = Literal["user", "assistant", "system"]
+
+
+class ChatTurn(BaseModel):
+    role: ChatRole
+    content: str = Field(min_length=1)
 
 
 class CompleteRequest(BaseModel):
-    prompt: str = Field(min_length=1)
+    """Single-turn prompt and/or multi-turn messages (chat follow-ups)."""
+
+    prompt: str = ""
+    messages: list[ChatTurn] | None = None
     task_type: TaskType | None = None
     policy: Policy = "orchestra"
     force_model: str | None = None
+
+    @model_validator(mode="after")
+    def require_prompt_or_messages(self) -> "CompleteRequest":
+        has_messages = bool(self.messages) and any(
+            m.content.strip() for m in (self.messages or [])
+        )
+        has_prompt = bool((self.prompt or "").strip())
+        if not has_prompt and not has_messages:
+            raise ValueError("prompt or messages is required")
+        if has_messages:
+            if not any(m.role == "user" and m.content.strip() for m in self.messages or []):
+                raise ValueError("messages must include at least one user turn")
+        return self
 
 
 class AttemptTrace(BaseModel):

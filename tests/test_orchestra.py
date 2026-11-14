@@ -148,25 +148,27 @@ def test_stream_orchestra_emits_decompose_and_synthesize(monkeypatch):
     models = load_models()
     spec = next(iter(models.values()))
 
-    def fake_iter(prompt, task_type, **kwargs):
-        yield (
-            "attempt_start",
-            {"index": 0, "model": spec.id, "provider": spec.provider},
-        )
-        yield (
-            "attempt_end",
-            {
-                "index": 0,
-                "model": spec.id,
-                "provider": spec.provider,
-                "outcome": "success",
-                "reason": None,
-                "latency_ms": 5,
-                "tokens_in": 1,
-                "tokens_out": 2,
-                "est_cost": 0.0,
-            },
-        )
+    def fake_complete(prompt, task_type, **kwargs):
+        on_event = kwargs.get("on_event")
+        if on_event:
+            on_event(
+                "attempt_start",
+                {"index": 0, "model": spec.id, "provider": spec.provider},
+            )
+            on_event(
+                "attempt_end",
+                {
+                    "index": 0,
+                    "model": spec.id,
+                    "provider": spec.provider,
+                    "outcome": "success",
+                    "reason": None,
+                    "latency_ms": 5,
+                    "tokens_in": 1,
+                    "tokens_out": 2,
+                    "est_cost": 0.0,
+                },
+            )
         return CompletionOutcome(
             spec=spec,
             result=AdapterResult("ok", 1, 2, 5),
@@ -178,7 +180,7 @@ def test_stream_orchestra_emits_decompose_and_synthesize(monkeypatch):
             success=True,
         )
 
-    monkeypatch.setattr("app.engine.iter_complete_with_fallback", fake_iter)
+    monkeypatch.setattr("app.engine.complete_with_fallback", fake_complete)
     monkeypatch.setattr(
         "app.engine.rank_models",
         lambda task_type: [(spec, 1.0)],
@@ -199,10 +201,71 @@ def test_stream_orchestra_emits_decompose_and_synthesize(monkeypatch):
 
     names = [e[0] for e in events]
     assert "decomposed" in names
+    assert "part_ranked" in names
+    assert "part_done" in names
     assert "synthesized" in names
     assert "final" in names
     assert names.index("decomposed") < names.index("synthesized")
     assert names.index("synthesized") < names.index("final")
+    # All rankings emitted before any specialist finishes.
+    assert max(i for i, n in enumerate(names) if n == "part_ranked") < names.index(
+        "part_done"
+    )
+
+
+def test_stream_orchestra_runs_parts_in_parallel(monkeypatch):
+    import threading
+    import time
+
+    models = load_models()
+    spec = next(iter(models.values()))
+    active = 0
+    max_active = 0
+    lock = threading.Lock()
+
+    def fake_complete(prompt, task_type, **kwargs):
+        nonlocal active, max_active
+        with lock:
+            active += 1
+            max_active = max(max_active, active)
+        time.sleep(0.12)
+        with lock:
+            active -= 1
+        return CompletionOutcome(
+            spec=spec,
+            result=AdapterResult(f"answer-{task_type}", 1, 2, 120),
+            est_cost=0.0,
+            fallback_used=False,
+            fallback_from=None,
+            ranked_ids=[spec.id],
+            attempts=[],
+            success=True,
+        )
+
+    monkeypatch.setattr("app.engine.complete_with_fallback", fake_complete)
+    monkeypatch.setattr(
+        "app.engine.rank_models",
+        lambda task_type: [(spec, 1.0)],
+    )
+    monkeypatch.setattr("app.engine._scoreboard_for", lambda task_type: [])
+
+    body = CompleteRequest(
+        prompt=(
+            "1) Write a Python function that adds.\n\n"
+            "2) Calculate 2+2.\n\n"
+            "3) Write a four-line haiku about clouds."
+        ),
+        policy="orchestra",
+    )
+    started = time.perf_counter()
+    events = list(stream_orchestra(_FakeDB(), body))
+    elapsed = time.perf_counter() - started
+
+    part_dones = [e for e in events if e[0] == "part_done"]
+    assert len(part_dones) >= 2
+    # Parallel: wall time closer to one sleep than N sleeps.
+    assert elapsed < 0.12 * len(part_dones) * 0.85
+    assert max_active >= 2
 
 
 def test_classify_math():

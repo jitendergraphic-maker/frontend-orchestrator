@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db import get_db, init_db
 from app.engine import handle_complete, stream_complete
-from app.eval_runner import run_eval
+from app.eval_runner import run_eval, stream_eval
 from app.registry import load_models, load_routing
 from app.router import rank_models_detailed
 from app.schemas import CompleteRequest, EvalRunRequest
@@ -71,6 +71,7 @@ def models():
                 "display_name": spec.display_name,
                 "input_cost_per_1k": spec.input_cost_per_1k,
                 "output_cost_per_1k": spec.output_cost_per_1k,
+                "billable": spec.billable,
                 "typical_latency_ms": spec.typical_latency_ms,
                 "strengths": spec.strengths,
                 "enabled": spec.enabled,
@@ -100,18 +101,30 @@ def rank(task_type: str = Query(default="qa")):
 
 
 @app.get("/v1/stats/overview")
-def stats_overview(eval_run_id: str | None = None, db: Session = Depends(get_db)):
-    return overview(db, eval_run_id)
+def stats_overview(
+    eval_run_id: str | None = None,
+    scope: str = "live",
+    db: Session = Depends(get_db),
+):
+    return overview(db, eval_run_id, scope=scope)
 
 
 @app.get("/v1/stats/by-model")
-def stats_models(db: Session = Depends(get_db)):
-    return by_model(db)
+def stats_models(
+    include_retired: bool = False,
+    scope: str = "live",
+    db: Session = Depends(get_db),
+):
+    return by_model(db, include_retired=include_retired, scope=scope)
 
 
 @app.get("/v1/stats/by-task")
-def stats_tasks(db: Session = Depends(get_db)):
-    return by_task(db)
+def stats_tasks(
+    scope: str = "live",
+    eval_run_id: str | None = None,
+    db: Session = Depends(get_db),
+):
+    return by_task(db, scope=scope, eval_run_id=eval_run_id)
 
 
 @app.get("/v1/requests")
@@ -123,6 +136,25 @@ def list_requests(limit: int = 50, db: Session = Depends(get_db)):
 def eval_run(body: EvalRunRequest | None = None, db: Session = Depends(get_db)):
     body = body or EvalRunRequest()
     return run_eval(db, limit=body.limit, notes=body.notes)
+
+
+@app.post("/v1/eval/run/stream")
+def eval_run_stream(body: EvalRunRequest | None = None, db: Session = Depends(get_db)):
+    """NDJSON stream of eval progress events, ending with event=final."""
+    body = body or EvalRunRequest()
+
+    def generate():
+        for event, payload in stream_eval(db, limit=body.limit, notes=body.notes):
+            yield json.dumps({"event": event, "data": payload}, default=str) + "\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="application/x-ndjson",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.get("/v1/eval/latest")
