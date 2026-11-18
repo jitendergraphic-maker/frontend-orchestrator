@@ -12,6 +12,7 @@ from app.eval_runner import run_eval, stream_eval
 from app.registry import load_models, load_routing
 from app.router import rank_models_detailed
 from app.schemas import CompleteRequest, EvalRunRequest
+from app.seed_import import import_seed_if_needed
 from app.stats import by_model, by_task, latest_eval, overview, recent_requests
 
 app = FastAPI(title="LLM Orchestration Engine", version="0.2.0")
@@ -28,6 +29,8 @@ app.add_middleware(
 @app.on_event("startup")
 def startup() -> None:
     init_db()
+    # Loads fixtures/db_seed.json when DB is empty (or IMPORT_LOCAL_SEED=true).
+    import_seed_if_needed()
 
 
 @app.get("/health")

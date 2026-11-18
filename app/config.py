@@ -43,6 +43,8 @@ class Settings(BaseSettings):
         "http://localhost:5174,http://127.0.0.1:5174"
     )
     completion_max_tokens: int = 1536
+    # When true, merge fixtures/db_seed.json even if request_logs already exist.
+    import_local_seed: bool = False
 
 
 @lru_cache
