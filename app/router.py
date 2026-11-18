@@ -38,6 +38,18 @@ def provider_status(spec: ModelSpec) -> tuple[bool, str | None]:
         if not settings.coarena_api_key:
             return False, "missing_credentials"
         return True, None
+    if spec.provider == "cloudflare":
+        if not settings.cloudflare_api_token or not settings.cloudflare_account_id:
+            return False, "missing_credentials"
+        return True, None
+    if spec.provider == "cohere":
+        if not settings.cohere_api_key:
+            return False, "missing_credentials"
+        return True, None
+    if spec.provider == "sambanova":
+        if not settings.sambanova_api_key:
+            return False, "missing_credentials"
+        return True, None
     if spec.provider == "ollama":
         return False, "ollama_disabled"
     if spec.provider in ("openai", "anthropic"):

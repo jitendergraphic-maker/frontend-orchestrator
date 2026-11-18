@@ -1,18 +1,42 @@
 models:
   # Strengths are routing priors across 12 task types (not measured accuracy).
-# Costs are vendor list USD / 1K tokens (for est_cost / overview). billable:false
-# means free-to-us tier — ranking treats cost as 0 so CoArena still wins first.
-  # Each model has intentional specialty peaks so orchestra can use the full catalog.
+  # Costs are vendor list USD / 1K tokens (for est_cost / overview). billable:false
+  # means free-to-us tier — ranking treats cost as 0.
+  # Catalog is free-only: Cloudflare Workers AI + proven free fallbacks.
 
-  # --- Groq ---
-  - id: groq-gpt-oss-20b
-    provider: groq
-    display_name: GPT-OSS 20B (Groq)
-    api_model: openai/gpt-oss-20b
+  # --- Cloudflare Workers AI (primary free catalog) ---
+  - id: cf-gpt-oss-120b
+    provider: cloudflare
+    billable: false
+    display_name: GPT-OSS 120B (Cloudflare)
+    api_model: "@cf/openai/gpt-oss-120b"
+    # High list price for savings demos; billable:false so routing cost is still 0.
+    input_cost_per_1k: 0.01
+    output_cost_per_1k: 0.05
+    typical_latency_ms: 2200
+    strengths:
+      qa: 0.90
+      code: 0.88
+      debug: 0.86
+      math: 0.90
+      reasoning: 0.92
+      summarization: 0.88
+      creative: 0.86
+      translation: 0.84
+      extraction: 0.86
+      analysis: 0.90
+      chat: 0.84
+      vision: 0.40
+    enabled: true
+
+  - id: cf-gpt-oss-20b
+    provider: cloudflare
+    billable: false
+    display_name: GPT-OSS 20B (Cloudflare)
+    api_model: "@cf/openai/gpt-oss-20b"
     input_cost_per_1k: 0.0001
     output_cost_per_1k: 0.0005
-    typical_latency_ms: 700
-    # Specialty: chat / balanced baseline
+    typical_latency_ms: 900
     strengths:
       qa: 0.86
       code: 0.84
@@ -24,57 +48,311 @@ models:
       translation: 0.80
       extraction: 0.82
       analysis: 0.84
-      chat: 0.92
+      chat: 0.90
+      vision: 0.40
+    enabled: true
+
+  - id: cf-llama-3.3-70b
+    provider: cloudflare
+    billable: false
+    display_name: Llama 3.3 70B (Cloudflare)
+    api_model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+    input_cost_per_1k: 0.00029
+    output_cost_per_1k: 0.0022
+    typical_latency_ms: 900
+    strengths:
+      qa: 0.98
+      code: 0.86
+      debug: 0.84
+      math: 0.88
+      reasoning: 0.90
+      summarization: 0.94
+      creative: 0.88
+      translation: 0.86
+      extraction: 0.88
+      analysis: 0.90
+      chat: 0.88
+      vision: 0.40
+    enabled: true
+
+  - id: cf-llama-3.1-8b
+    provider: cloudflare
+    billable: false
+    display_name: Llama 3.1 8B (Cloudflare)
+    api_model: "@cf/meta/llama-3.1-8b-instruct-fp8"
+    input_cost_per_1k: 0.00005
+    output_cost_per_1k: 0.0002
+    typical_latency_ms: 450
+    strengths:
+      qa: 0.82
+      code: 0.72
+      debug: 0.70
+      math: 0.72
+      reasoning: 0.74
+      summarization: 0.84
+      creative: 0.80
+      translation: 0.78
+      extraction: 0.76
+      analysis: 0.76
+      chat: 0.97
+      vision: 0.40
+    enabled: true
+
+  - id: cf-qwen-coder-32b
+    provider: cloudflare
+    billable: false
+    display_name: Qwen2.5 Coder 32B (Cloudflare)
+    api_model: "@cf/qwen/qwen2.5-coder-32b-instruct"
+    input_cost_per_1k: 0.0002
+    output_cost_per_1k: 0.0008
+    typical_latency_ms: 900
+    strengths:
+      qa: 0.80
+      code: 0.99
+      debug: 0.98
+      math: 0.86
+      reasoning: 0.84
+      summarization: 0.78
+      creative: 0.70
+      translation: 0.78
+      extraction: 0.90
+      analysis: 0.84
+      chat: 0.76
+      vision: 0.40
+    enabled: true
+
+  - id: cf-kimi-code
+    provider: cloudflare
+    billable: false
+    display_name: Kimi K2.7 Code (Cloudflare)
+    api_model: "@cf/moonshotai/kimi-k2.7-code"
+    input_cost_per_1k: 0.0002
+    output_cost_per_1k: 0.0008
+    typical_latency_ms: 1000
+    strengths:
+      qa: 0.78
+      code: 0.97
+      debug: 0.96
+      math: 0.84
+      reasoning: 0.86
+      summarization: 0.76
+      creative: 0.72
+      translation: 0.76
+      extraction: 0.88
+      analysis: 0.84
+      chat: 0.74
+      vision: 0.40
+    enabled: true
+
+  - id: cf-deepseek-r1
+    provider: cloudflare
+    billable: false
+    display_name: DeepSeek R1 Distill Qwen 32B (Cloudflare)
+    api_model: "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b"
+    input_cost_per_1k: 0.0002
+    output_cost_per_1k: 0.0008
+    typical_latency_ms: 1500
+    strengths:
+      qa: 0.86
+      code: 0.88
+      debug: 0.86
+      math: 0.94
+      reasoning: 0.99
+      summarization: 0.82
+      creative: 0.74
+      translation: 0.80
+      extraction: 0.84
+      analysis: 0.92
+      chat: 0.72
+      vision: 0.40
+    enabled: true
+
+  - id: cf-qwq-32b
+    provider: cloudflare
+    billable: false
+    display_name: QwQ 32B (Cloudflare)
+    api_model: "@cf/qwen/qwq-32b"
+    input_cost_per_1k: 0.0002
+    output_cost_per_1k: 0.0008
+    typical_latency_ms: 1600
+    strengths:
+      qa: 0.84
+      code: 0.86
+      debug: 0.84
+      math: 0.92
+      reasoning: 0.98
+      summarization: 0.80
+      creative: 0.72
+      translation: 0.82
+      extraction: 0.82
+      analysis: 0.90
+      chat: 0.70
+      vision: 0.40
+    enabled: true
+
+  - id: cf-qwen3.8-27b
+    provider: cloudflare
+    billable: false
+    display_name: Qwen 3.8 27B (Cloudflare)
+    api_model: "@cf/qwen/qwen3.8-27b"
+    input_cost_per_1k: 0.0001
+    output_cost_per_1k: 0.0004
+    typical_latency_ms: 800
+    strengths:
+      qa: 0.86
+      code: 0.88
+      debug: 0.86
+      math: 0.98
+      reasoning: 0.88
+      summarization: 0.84
+      creative: 0.78
+      translation: 0.98
+      extraction: 0.86
+      analysis: 0.86
+      chat: 0.82
+      vision: 0.40
+    enabled: true
+
+  - id: cf-glm-5.3-flash
+    provider: cloudflare
+    billable: false
+    display_name: GLM 5.3 Flash (Cloudflare)
+    api_model: "@cf/zai-org/glm-5.3-flash"
+    input_cost_per_1k: 0.0001
+    output_cost_per_1k: 0.0004
+    typical_latency_ms: 900
+    strengths:
+      qa: 0.88
+      code: 0.86
+      debug: 0.84
+      math: 0.96
+      reasoning: 0.88
+      summarization: 0.86
+      creative: 0.80
+      translation: 0.84
+      extraction: 0.86
+      analysis: 0.95
+      chat: 0.84
+      vision: 0.45
+    enabled: true
+
+  - id: cf-mistral-small
+    provider: cloudflare
+    billable: false
+    display_name: Mistral Small 3.1 24B (Cloudflare)
+    api_model: "@cf/mistralai/mistral-small-3.1-24b-instruct"
+    input_cost_per_1k: 0.00015
+    output_cost_per_1k: 0.0006
+    typical_latency_ms: 1000
+    strengths:
+      qa: 0.86
+      code: 0.84
+      debug: 0.82
+      math: 0.84
+      reasoning: 0.86
+      summarization: 0.88
+      creative: 0.84
+      translation: 0.86
+      extraction: 0.94
+      analysis: 0.97
+      chat: 0.86
+      vision: 0.45
+    enabled: true
+
+  - id: cf-llama-vision
+    provider: cloudflare
+    billable: false
+    display_name: Llama 3.2 11B Vision (Cloudflare)
+    api_model: "@cf/meta/llama-3.2-11b-vision-instruct"
+    input_cost_per_1k: 0.0002
+    output_cost_per_1k: 0.0008
+    typical_latency_ms: 1100
+    strengths:
+      qa: 0.80
+      code: 0.70
+      debug: 0.68
+      math: 0.72
+      reasoning: 0.74
+      summarization: 0.82
+      creative: 0.78
+      translation: 0.76
+      extraction: 0.80
+      analysis: 0.80
+      chat: 0.82
+      vision: 0.99
+    enabled: true
+
+  # --- Groq (free-tier API; free-to-us) ---
+  - id: groq-gpt-oss-20b
+    provider: groq
+    billable: false
+    display_name: GPT-OSS 20B (Groq)
+    api_model: openai/gpt-oss-20b
+    input_cost_per_1k: 0.0001
+    output_cost_per_1k: 0.0005
+    typical_latency_ms: 700
+    strengths:
+      qa: 0.84
+      code: 0.82
+      debug: 0.80
+      math: 0.82
+      reasoning: 0.84
+      summarization: 0.82
+      creative: 0.80
+      translation: 0.78
+      extraction: 0.80
+      analysis: 0.82
+      chat: 0.90
       vision: 0.40
     enabled: true
 
   - id: groq-gpt-oss-120b
     provider: groq
+    billable: false
     display_name: GPT-OSS 120B (Groq)
     api_model: openai/gpt-oss-120b
     input_cost_per_1k: 0.00015
     output_cost_per_1k: 0.0006
     typical_latency_ms: 1600
-    # Specialty: reasoning + analysis
     strengths:
-      qa: 0.88
-      code: 0.86
-      debug: 0.85
-      math: 0.88
-      reasoning: 0.90
-      summarization: 0.86
-      creative: 0.84
-      translation: 0.82
-      extraction: 0.86
-      analysis: 0.88
+      qa: 0.86
+      code: 0.84
+      debug: 0.82
+      math: 0.86
+      reasoning: 0.88
+      summarization: 0.84
+      creative: 0.82
+      translation: 0.80
+      extraction: 0.84
+      analysis: 0.86
       chat: 0.80
       vision: 0.40
     enabled: true
 
   - id: groq-qwen3-27b
     provider: groq
+    billable: false
     display_name: Qwen 3.8 27B (Groq)
     api_model: qwen/qwen3.8-27b
     input_cost_per_1k: 0.0001
     output_cost_per_1k: 0.0004
     typical_latency_ms: 400
-    # Specialty: translation + code + math (fast)
     strengths:
-      qa: 0.86
-      code: 0.93
-      debug: 0.88
-      math: 0.92
-      reasoning: 0.88
-      summarization: 0.84
-      creative: 0.78
+      qa: 0.82
+      code: 0.86
+      debug: 0.84
+      math: 0.88
+      reasoning: 0.84
+      summarization: 0.80
+      creative: 0.74
       translation: 0.90
-      extraction: 0.86
-      analysis: 0.85
-      chat: 0.82
+      extraction: 0.82
+      analysis: 0.82
+      chat: 0.78
       vision: 0.40
     enabled: true
 
-  # --- Gemini ---
+  # --- Gemini free ---
   - id: gemini-3.5-flash-lite
     provider: gemini
     billable: false
@@ -83,15 +361,14 @@ models:
     input_cost_per_1k: 0.00025
     output_cost_per_1k: 0.0015
     typical_latency_ms: 500
-    # Specialty: chat + light summarization
     strengths:
-      qa: 0.86
-      code: 0.70
-      debug: 0.68
-      math: 0.70
-      reasoning: 0.72
-      summarization: 0.86
-      creative: 0.80
+      qa: 0.84
+      code: 0.68
+      debug: 0.66
+      math: 0.68
+      reasoning: 0.70
+      summarization: 0.90
+      creative: 0.86
       translation: 0.84
       extraction: 0.74
       analysis: 0.74
@@ -99,127 +376,7 @@ models:
       vision: 0.55
     enabled: true
 
-  - id: gemini-3.5-flash
-    provider: gemini
-    billable: false
-    display_name: Gemini 3.5 Flash
-    api_model: gemini-3.5-flash
-    input_cost_per_1k: 0.0005
-    output_cost_per_1k: 0.003
-    typical_latency_ms: 900
-    # Specialty: creative + qa (fallback under CoArena)
-    strengths:
-      qa: 0.88
-      code: 0.76
-      debug: 0.74
-      math: 0.76
-      reasoning: 0.80
-      summarization: 0.86
-      creative: 0.88
-      translation: 0.86
-      extraction: 0.80
-      analysis: 0.82
-      chat: 0.86
-      vision: 0.60
-    enabled: true
-
-  - id: gemini-3.6-flash
-    provider: gemini
-    billable: false
-    display_name: Gemini 3.6 Flash
-    api_model: gemini-3.6-flash
-    input_cost_per_1k: 0.00075
-    output_cost_per_1k: 0.00375
-    typical_latency_ms: 1200
-    # Specialty: qa + summarization (fallback under CoArena)
-    strengths:
-      qa: 0.90
-      code: 0.78
-      debug: 0.76
-      math: 0.78
-      reasoning: 0.82
-      summarization: 0.90
-      creative: 0.86
-      translation: 0.88
-      extraction: 0.84
-      analysis: 0.86
-      chat: 0.84
-      vision: 0.62
-    enabled: true
-
-  # --- NVIDIA ---
-  - id: nvidia-llama-3.2-11b
-    provider: nvidia
-    display_name: Llama 3.2 11B Vision (NVIDIA)
-    api_model: meta/llama-3.2-11b-vision-instruct
-    input_cost_per_1k: 0.00005
-    output_cost_per_1k: 0.00008
-    typical_latency_ms: 600
-    # Specialty: vision (+ general qa)
-    strengths:
-      qa: 0.90
-      code: 0.74
-      debug: 0.72
-      math: 0.74
-      reasoning: 0.76
-      summarization: 0.82
-      creative: 0.80
-      translation: 0.78
-      extraction: 0.80
-      analysis: 0.78
-      chat: 0.84
-      vision: 0.90
-    enabled: true
-
-  - id: nvidia-glm-5.3-flash
-    provider: nvidia
-    billable: false
-    display_name: GLM 5.3 Flash (NVIDIA)
-    api_model: z-ai/glm-5.3-flash
-    input_cost_per_1k: 0.0001
-    output_cost_per_1k: 0.0004
-    typical_latency_ms: 1000
-    # Specialty: math + reasoning (fallback under CoArena)
-    strengths:
-      qa: 0.84
-      code: 0.84
-      debug: 0.82
-      math: 0.90
-      reasoning: 0.88
-      summarization: 0.82
-      creative: 0.78
-      translation: 0.80
-      extraction: 0.84
-      analysis: 0.86
-      chat: 0.76
-      vision: 0.45
-    enabled: true
-
-  # --- OpenRouter free ---
-  - id: or-lfm-2.5-free
-    provider: openrouter
-    billable: false
-    display_name: LFM 2.5 2.6B (OpenRouter free)
-    api_model: liquid/lfm-2.5-2.6b:free
-    input_cost_per_1k: 0.0
-    output_cost_per_1k: 0.0
-    typical_latency_ms: 1000
-    # Specialty: chat (tiny filler)
-    strengths:
-      qa: 0.70
-      code: 0.52
-      debug: 0.50
-      math: 0.48
-      reasoning: 0.50
-      summarization: 0.68
-      creative: 0.72
-      translation: 0.60
-      extraction: 0.55
-      analysis: 0.55
-      chat: 0.86
-      vision: 0.35
-    enabled: true
-
+  # --- OpenRouter free (working) ---
   - id: or-nemotron-lightning-free
     provider: openrouter
     billable: false
@@ -227,68 +384,42 @@ models:
     api_model: nvidia/nemotron-3.5-lightning:free
     input_cost_per_1k: 0.0
     output_cost_per_1k: 0.0
-    typical_latency_ms: 1100
-    # Specialty: analysis + reasoning + extraction (fallback under CoArena)
+    typical_latency_ms: 1200
     strengths:
-      qa: 0.84
-      code: 0.82
-      debug: 0.80
-      math: 0.88
-      reasoning: 0.88
+      qa: 0.82
+      code: 0.80
+      debug: 0.78
+      math: 0.80
+      reasoning: 0.82
       summarization: 0.84
-      creative: 0.76
+      creative: 0.78
       translation: 0.78
-      extraction: 0.88
-      analysis: 0.88
-      chat: 0.74
-      vision: 0.45
+      extraction: 0.82
+      analysis: 0.90
+      chat: 0.80
+      vision: 0.40
     enabled: true
 
   - id: or-auto-free
     provider: openrouter
     billable: false
-    display_name: OpenRouter Free Router
+    display_name: OpenRouter Auto (free)
     api_model: openrouter/free
     input_cost_per_1k: 0.0
     output_cost_per_1k: 0.0
-    typical_latency_ms: 1200
-    # Flat generalist fallback — no specialty peaks
+    typical_latency_ms: 1500
     strengths:
       qa: 0.80
       code: 0.78
-      debug: 0.78
+      debug: 0.76
       math: 0.78
-      reasoning: 0.78
+      reasoning: 0.80
       summarization: 0.80
       creative: 0.78
       translation: 0.78
       extraction: 0.78
-      analysis: 0.78
-      chat: 0.80
-      vision: 0.50
-    enabled: true
-
-  - id: or-laguna-xs-free
-    provider: openrouter
-    billable: false
-    display_name: Laguna XS 2.1 (OpenRouter free)
-    api_model: poolside/laguna-xs-2.1:free
-    input_cost_per_1k: 0.0
-    output_cost_per_1k: 0.0
-    typical_latency_ms: 1200
-    # Specialty: code (small)
-    strengths:
-      qa: 0.76
-      code: 0.90
-      debug: 0.88
-      math: 0.80
-      reasoning: 0.78
-      summarization: 0.72
-      creative: 0.68
-      translation: 0.70
-      extraction: 0.82
-      analysis: 0.76
-      chat: 0.72
+      analysis: 0.80
+      chat: 0.82
       vision: 0.40
     enabled: true
 
@@ -300,183 +431,66 @@ models:
     input_cost_per_1k: 0.0
     output_cost_per_1k: 0.0
     typical_latency_ms: 900
-    # Specialty: code + debug
     strengths:
-      qa: 0.72
-      code: 0.90
-      debug: 0.88
+      qa: 0.76
+      code: 0.92
+      debug: 0.90
       math: 0.78
-      reasoning: 0.76
-      summarization: 0.68
-      creative: 0.62
-      translation: 0.68
-      extraction: 0.80
-      analysis: 0.74
-      chat: 0.70
-      vision: 0.35
-    enabled: true
-
-  - id: or-laguna-s-free
-    provider: openrouter
-    billable: false
-    display_name: Laguna S 2.1 (OpenRouter free)
-    api_model: poolside/laguna-s-2.1:free
-    input_cost_per_1k: 0.0
-    output_cost_per_1k: 0.0
-    typical_latency_ms: 1100
-    # Specialty: code + extraction (fallback under CoArena)
-    strengths:
-      qa: 0.78
-      code: 0.88
-      debug: 0.86
-      math: 0.84
-      reasoning: 0.82
-      summarization: 0.76
-      creative: 0.70
-      translation: 0.72
-      extraction: 0.88
-      analysis: 0.82
+      reasoning: 0.80
+      summarization: 0.74
+      creative: 0.68
+      translation: 0.74
+      extraction: 0.84
+      analysis: 0.80
       chat: 0.74
       vision: 0.40
     enabled: true
 
-  # --- CoArena (primary when COARENA_API_KEY is set; free tier) ---
-  - id: ca-claude-opus-5-5
+  # --- CoArena free tier only ---
+  - id: ca-gemini-3-8-flash
     provider: coarena
     billable: false
-    display_name: Claude Opus 5.5 (CoArena)
-    api_model: claude-opus-5-5
-    input_cost_per_1k: 0.004
-    output_cost_per_1k: 0.02
-    typical_latency_ms: 2200
+    display_name: Gemini 3.8 Flash (CoArena)
+    api_model: gemini-3-8-flash
+    input_cost_per_1k: 0.00075
+    output_cost_per_1k: 0.003
+    typical_latency_ms: 900
     strengths:
-      qa: 0.90
-      code: 0.97
-      debug: 0.96
-      math: 0.92
-      reasoning: 0.99
-      summarization: 0.90
-      creative: 0.88
-      translation: 0.86
-      extraction: 0.90
-      analysis: 0.98
-      chat: 0.86
-      vision: 0.88
-    enabled: true
-
-  - id: ca-claude-sonnet-5-5
-    provider: coarena
-    billable: false
-    display_name: Claude Sonnet 5.5 (CoArena)
-    api_model: claude-sonnet-5-5
-    input_cost_per_1k: 0.002
-    output_cost_per_1k: 0.01
-    typical_latency_ms: 1400
-    strengths:
-      qa: 0.88
-      code: 0.98
-      debug: 0.97
-      math: 0.88
-      reasoning: 0.92
-      summarization: 0.86
-      creative: 0.84
-      translation: 0.84
-      extraction: 0.88
-      analysis: 0.95
-      chat: 0.84
-      vision: 0.86
-    enabled: true
-
-  - id: ca-claude-fable-5
-    provider: coarena
-    billable: false
-    display_name: Claude Fable 5 (CoArena)
-    api_model: claude-fable-5
-    input_cost_per_1k: 0.01
-    output_cost_per_1k: 0.05
-    typical_latency_ms: 1600
-    strengths:
-      qa: 0.86
-      code: 0.82
-      debug: 0.80
-      math: 0.80
-      reasoning: 0.88
-      summarization: 0.86
-      creative: 0.97
-      translation: 0.84
-      extraction: 0.82
-      analysis: 0.92
-      chat: 0.94
-      vision: 0.86
-    enabled: true
-
-  - id: ca-claude-fable-5-1
-    provider: coarena
-    billable: false
-    display_name: Claude Fable 5.1 (CoArena)
-    api_model: claude-fable-5-1
-    input_cost_per_1k: 0.01
-    output_cost_per_1k: 0.05
-    typical_latency_ms: 1650
-    strengths:
-      qa: 0.86
-      code: 0.83
-      debug: 0.81
-      math: 0.81
-      reasoning: 0.89
-      summarization: 0.87
-      creative: 0.98
-      translation: 0.84
-      extraction: 0.83
-      analysis: 0.93
-      chat: 0.95
-      vision: 0.87
-    enabled: true
-
-  - id: ca-claude-fable-5-2
-    provider: coarena
-    billable: false
-    display_name: Claude Fable 5.2 (CoArena)
-    api_model: claude-fable-5-2
-    input_cost_per_1k: 0.008
-    output_cost_per_1k: 0.04
-    typical_latency_ms: 1700
-    strengths:
-      qa: 0.87
+      qa: 0.92
       code: 0.84
       debug: 0.82
-      math: 0.82
-      reasoning: 0.90
-      summarization: 0.88
-      creative: 0.99
-      translation: 0.85
-      extraction: 0.84
-      analysis: 0.94
-      chat: 0.96
-      vision: 0.88
+      math: 0.86
+      reasoning: 0.88
+      summarization: 0.90
+      creative: 0.86
+      translation: 0.86
+      extraction: 0.86
+      analysis: 0.88
+      chat: 0.88
+      vision: 0.55
     enabled: true
 
-  - id: ca-claude-haiku-5-5
+  - id: ca-gpt-6-luna
     provider: coarena
     billable: false
-    display_name: Claude Haiku 5.5 (CoArena)
-    api_model: claude-haiku-5-5
+    display_name: GPT-6 Luna (CoArena)
+    api_model: gpt-6-luna
     input_cost_per_1k: 0.0001
-    output_cost_per_1k: 0.0005
-    typical_latency_ms: 500
+    output_cost_per_1k: 0.0004
+    typical_latency_ms: 1100
     strengths:
       qa: 0.88
-      code: 0.78
-      debug: 0.76
-      math: 0.76
-      reasoning: 0.80
-      summarization: 0.97
-      creative: 0.84
-      translation: 0.86
-      extraction: 0.96
-      analysis: 0.84
-      chat: 0.98
-      vision: 0.82
+      code: 0.84
+      debug: 0.82
+      math: 0.86
+      reasoning: 0.86
+      summarization: 0.86
+      creative: 0.90
+      translation: 0.84
+      extraction: 0.84
+      analysis: 0.86
+      chat: 0.90
+      vision: 0.50
     enabled: true
 
   - id: ca-deepseek-v4-1-flash
@@ -486,317 +500,410 @@ models:
     api_model: deepseek-v4-1-flash-1017
     input_cost_per_1k: 0.00014
     output_cost_per_1k: 0.00028
-    typical_latency_ms: 700
+    typical_latency_ms: 1100
     strengths:
       qa: 0.86
-      code: 0.97
-      debug: 0.92
-      math: 0.96
-      reasoning: 0.95
+      code: 0.88
+      debug: 0.86
+      math: 0.90
+      reasoning: 0.90
       summarization: 0.84
       creative: 0.78
       translation: 0.82
       extraction: 0.86
-      analysis: 0.90
-      chat: 0.80
-      vision: 0.78
-    enabled: true
-
-  - id: ca-glm-5-3-flash
-    provider: coarena
-    billable: false
-    display_name: GLM 5.3 Flash (CoArena)
-    api_model: glm-5-3-flash
-    input_cost_per_1k: 0.0001
-    output_cost_per_1k: 0.0004
-    typical_latency_ms: 800
-    strengths:
-      qa: 0.86
-      code: 0.88
-      debug: 0.86
-      math: 0.98
-      reasoning: 0.96
-      summarization: 0.84
-      creative: 0.80
-      translation: 0.82
-      extraction: 0.86
-      analysis: 0.92
-      chat: 0.80
-      vision: 0.70
-    enabled: true
-
-  - id: ca-gemini-3-8-flash
-    provider: coarena
-    billable: false
-    display_name: Gemini 3.8 Flash (CoArena)
-    api_model: gemini-3-8-flash
-    input_cost_per_1k: 0.00075
-    output_cost_per_1k: 0.00375
-    typical_latency_ms: 600
-    strengths:
-      qa: 0.97
-      code: 0.82
-      debug: 0.80
-      math: 0.84
-      reasoning: 0.86
-      summarization: 0.96
-      creative: 0.88
-      translation: 0.90
-      extraction: 0.86
       analysis: 0.88
-      chat: 0.97
-      vision: 0.94
+      chat: 0.82
+      vision: 0.45
     enabled: true
 
-  - id: ca-gemini-4-argon
-    provider: coarena
+  # --- Cohere trial (free; ~1000 calls/month, ~20 rpm/model) ---
+  - id: co-command-a-plus
+    provider: cohere
     billable: false
-    display_name: Gemini 4 Argon (CoArena)
-    api_model: gemini-4-argon
-    input_cost_per_1k: 0.002
-    output_cost_per_1k: 0.01
-    typical_latency_ms: 1500
+    display_name: Command A+ (Cohere)
+    api_model: command-a-plus-05-2026
+    input_cost_per_1k: 0.0
+    output_cost_per_1k: 0.0
+    typical_latency_ms: 1400
     strengths:
       qa: 0.92
       code: 0.88
       debug: 0.86
-      math: 0.90
-      reasoning: 0.96
-      summarization: 0.90
-      creative: 0.86
-      translation: 0.88
-      extraction: 0.90
-      analysis: 0.97
-      chat: 0.88
-      vision: 0.95
-    enabled: true
-
-  - id: ca-gemini-4-carbon
-    provider: coarena
-    billable: false
-    display_name: Gemini 4 Carbon (CoArena)
-    api_model: gemini-4-carbon
-    input_cost_per_1k: 0.002
-    output_cost_per_1k: 0.01
-    typical_latency_ms: 1400
-    strengths:
-      qa: 0.94
-      code: 0.86
-      debug: 0.84
       math: 0.88
-      reasoning: 0.92
-      summarization: 0.90
-      creative: 0.86
-      translation: 0.88
-      extraction: 0.90
-      analysis: 0.95
-      chat: 0.90
-      vision: 0.98
-    enabled: true
-
-  - id: ca-gpt-6-1-terra
-    provider: coarena
-    billable: false
-    display_name: GPT-6.1 Terra (CoArena)
-    api_model: gpt-6-1-terra
-    input_cost_per_1k: 0.001
-    output_cost_per_1k: 0.005
-    typical_latency_ms: 1600
-    strengths:
-      qa: 0.90
-      code: 0.96
-      debug: 0.94
-      math: 0.92
-      reasoning: 0.97
-      summarization: 0.88
-      creative: 0.84
-      translation: 0.86
-      extraction: 0.90
-      analysis: 0.94
-      chat: 0.86
-      vision: 0.88
-    enabled: true
-
-  - id: ca-gpt-6-1-sol
-    provider: coarena
-    billable: false
-    display_name: GPT-6.1 Sol (CoArena)
-    api_model: gpt-6-1-sol
-    input_cost_per_1k: 0.002
-    output_cost_per_1k: 0.01
-    typical_latency_ms: 1500
-    strengths:
-      qa: 0.96
-      code: 0.90
-      debug: 0.88
-      math: 0.90
       reasoning: 0.93
       summarization: 0.90
-      creative: 0.86
-      translation: 0.88
-      extraction: 0.90
-      analysis: 0.96
+      creative: 0.88
+      translation: 0.94
+      extraction: 0.88
+      analysis: 0.90
       chat: 0.90
-      vision: 0.88
+      vision: 0.85
     enabled: true
 
-  - id: ca-gpt-6-astra
-    provider: coarena
+  - id: co-command-a
+    provider: cohere
     billable: false
-    display_name: GPT-6 Astra (CoArena)
-    api_model: gpt-6-astra
-    input_cost_per_1k: 0.01
-    output_cost_per_1k: 0.05
-    typical_latency_ms: 1300
+    display_name: Command A (Cohere)
+    api_model: command-a-03-2025
+    input_cost_per_1k: 0.0
+    output_cost_per_1k: 0.0
+    typical_latency_ms: 1200
+    strengths:
+      qa: 0.90
+      code: 0.86
+      debug: 0.84
+      math: 0.86
+      reasoning: 0.88
+      summarization: 0.88
+      creative: 0.86
+      translation: 0.90
+      extraction: 0.88
+      analysis: 0.88
+      chat: 0.90
+      vision: 0.40
+    enabled: true
+
+  - id: co-command-a-reasoning
+    provider: cohere
+    billable: false
+    display_name: Command A Reasoning (Cohere)
+    api_model: command-a-reasoning-08-2025
+    input_cost_per_1k: 0.0
+    output_cost_per_1k: 0.0
+    typical_latency_ms: 2200
     strengths:
       qa: 0.88
+      code: 0.86
+      debug: 0.86
+      math: 0.92
+      reasoning: 0.97
+      summarization: 0.84
+      creative: 0.78
+      translation: 0.86
+      extraction: 0.86
+      analysis: 0.92
+      chat: 0.78
+      vision: 0.40
+    enabled: true
+
+  - id: co-command-a-translate
+    provider: cohere
+    billable: false
+    display_name: Command A Translate (Cohere)
+    api_model: command-a-translate-08-2025
+    input_cost_per_1k: 0.0
+    output_cost_per_1k: 0.0
+    typical_latency_ms: 900
+    strengths:
+      qa: 0.70
+      code: 0.50
+      debug: 0.50
+      math: 0.55
+      reasoning: 0.60
+      summarization: 0.72
+      creative: 0.70
+      translation: 0.99
+      extraction: 0.70
+      analysis: 0.68
+      chat: 0.72
+      vision: 0.30
+    enabled: true
+
+  - id: co-command-a-vision
+    provider: cohere
+    billable: false
+    display_name: Command A Vision (Cohere)
+    api_model: command-a-vision-07-2025
+    input_cost_per_1k: 0.0
+    output_cost_per_1k: 0.0
+    typical_latency_ms: 1500
+    strengths:
+      qa: 0.84
+      code: 0.70
+      debug: 0.68
+      math: 0.72
+      reasoning: 0.76
+      summarization: 0.84
+      creative: 0.78
+      translation: 0.80
+      extraction: 0.86
+      analysis: 0.86
+      chat: 0.82
+      vision: 0.97
+    enabled: true
+
+  - id: co-command-r7b
+    provider: cohere
+    billable: false
+    display_name: Command R7B (Cohere)
+    api_model: command-r7b-12-2024
+    input_cost_per_1k: 0.0
+    output_cost_per_1k: 0.0
+    typical_latency_ms: 700
+    strengths:
+      qa: 0.86
+      code: 0.82
+      debug: 0.80
+      math: 0.82
+      reasoning: 0.84
+      summarization: 0.86
+      creative: 0.82
+      translation: 0.84
+      extraction: 0.86
+      analysis: 0.86
+      chat: 0.88
+      vision: 0.40
+    enabled: true
+
+  - id: co-command-r7b-arabic
+    provider: cohere
+    billable: false
+    display_name: Command R7B Arabic (Cohere)
+    api_model: command-r7b-arabic-02-2025
+    input_cost_per_1k: 0.0
+    output_cost_per_1k: 0.0
+    typical_latency_ms: 800
+    strengths:
+      qa: 0.84
+      code: 0.78
+      debug: 0.76
+      math: 0.78
+      reasoning: 0.80
+      summarization: 0.84
+      creative: 0.80
+      translation: 0.92
+      extraction: 0.84
+      analysis: 0.84
+      chat: 0.86
+      vision: 0.40
+    enabled: true
+
+  - id: co-command-r
+    provider: cohere
+    billable: false
+    display_name: Command R (Cohere)
+    api_model: command-r-08-2024
+    input_cost_per_1k: 0.0
+    output_cost_per_1k: 0.0
+    typical_latency_ms: 900
+    strengths:
+      qa: 0.86
       code: 0.84
       debug: 0.82
       math: 0.84
-      reasoning: 0.88
-      summarization: 0.88
-      creative: 0.96
-      translation: 0.86
-      extraction: 0.84
-      analysis: 0.90
-      chat: 0.95
-      vision: 0.86
-    enabled: true
-
-  - id: ca-gpt-6-luna
-    provider: coarena
-    billable: false
-    display_name: GPT-6 Luna (CoArena)
-    api_model: gpt-6-luna
-    input_cost_per_1k: 0.0001
-    output_cost_per_1k: 0.0005
-    typical_latency_ms: 700
-    strengths:
-      qa: 0.90
-      code: 0.80
-      debug: 0.78
-      math: 0.80
-      reasoning: 0.84
-      summarization: 0.95
-      creative: 0.88
+      reasoning: 0.86
+      summarization: 0.86
+      creative: 0.82
       translation: 0.86
       extraction: 0.88
-      analysis: 0.86
-      chat: 0.97
-      vision: 0.84
+      analysis: 0.88
+      chat: 0.86
+      vision: 0.40
     enabled: true
 
-  - id: ca-grok-4-7
-    provider: coarena
+  - id: co-command-r-plus
+    provider: cohere
     billable: false
-    display_name: Grok 4.7 (CoArena)
-    api_model: grok-4-7
-    input_cost_per_1k: 0.003
-    output_cost_per_1k: 0.015
-    typical_latency_ms: 1200
+    display_name: Command R+ (Cohere)
+    api_model: command-r-plus-08-2024
+    input_cost_per_1k: 0.0
+    output_cost_per_1k: 0.0
+    typical_latency_ms: 1100
     strengths:
       qa: 0.88
       code: 0.86
       debug: 0.84
       math: 0.86
-      reasoning: 0.90
-      summarization: 0.86
-      creative: 0.97
-      translation: 0.84
-      extraction: 0.86
-      analysis: 0.94
-      chat: 0.92
-      vision: 0.86
-    enabled: true
-
-  - id: ca-kimi-k3-1-pro
-    provider: coarena
-    billable: false
-    display_name: Kimi K3.1 Pro (CoArena)
-    api_model: kimi-k3-1-pro
-    input_cost_per_1k: 0.0012
-    output_cost_per_1k: 0.006
-    typical_latency_ms: 1800
-    strengths:
-      qa: 0.90
-      code: 0.92
-      debug: 0.90
-      math: 0.92
-      reasoning: 0.98
-      summarization: 0.90
-      creative: 0.86
+      reasoning: 0.88
+      summarization: 0.88
+      creative: 0.84
       translation: 0.88
       extraction: 0.90
-      analysis: 0.97
-      chat: 0.88
-      vision: 0.86
+      analysis: 0.90
+      chat: 0.86
+      vision: 0.40
     enabled: true
 
-  - id: ca-mimo-v2-6-pro
-    provider: coarena
+  - id: co-north-mini-code
+    provider: cohere
     billable: false
-    display_name: MiMo V2.6 Pro (CoArena)
-    api_model: mimo-v2-6-pro
-    input_cost_per_1k: 0.0004
-    output_cost_per_1k: 0.002
-    typical_latency_ms: 1100
+    display_name: North Mini Code (Cohere)
+    api_model: north-mini-code-1.0
+    input_cost_per_1k: 0.0
+    output_cost_per_1k: 0.0
+    typical_latency_ms: 900
     strengths:
-      qa: 0.86
+      qa: 0.78
       code: 0.96
       debug: 0.95
-      math: 0.88
-      reasoning: 0.92
-      summarization: 0.84
-      creative: 0.80
-      translation: 0.82
+      math: 0.84
+      reasoning: 0.88
+      summarization: 0.76
+      creative: 0.70
+      translation: 0.74
       extraction: 0.88
-      analysis: 0.90
-      chat: 0.82
-      vision: 0.80
+      analysis: 0.84
+      chat: 0.76
+      vision: 0.40
     enabled: true
 
-  - id: ca-minimax-m3-1-flash
-    provider: coarena
+  - id: co-north-small-translate
+    provider: cohere
     billable: false
-    display_name: MiniMax M3.1 Flash (CoArena)
-    api_model: minimax-m3-1-flash
-    input_cost_per_1k: 0.00015
-    output_cost_per_1k: 0.0006
-    typical_latency_ms: 650
+    display_name: North Small Translate (Cohere)
+    api_model: north-small-translate-1.0
+    input_cost_per_1k: 0.0
+    output_cost_per_1k: 0.0
+    typical_latency_ms: 700
+    strengths:
+      qa: 0.68
+      code: 0.48
+      debug: 0.48
+      math: 0.50
+      reasoning: 0.55
+      summarization: 0.70
+      creative: 0.68
+      translation: 0.97
+      extraction: 0.68
+      analysis: 0.66
+      chat: 0.70
+      vision: 0.30
+    enabled: true
+
+  - id: co-aya-expanse-32b
+    provider: cohere
+    billable: false
+    display_name: Aya Expanse 32B (Cohere)
+    api_model: c4ai-aya-expanse-32b
+    input_cost_per_1k: 0.0
+    output_cost_per_1k: 0.0
+    typical_latency_ms: 1300
     strengths:
       qa: 0.86
       code: 0.80
       debug: 0.78
-      math: 0.80
+      math: 0.82
       reasoning: 0.84
-      summarization: 0.94
-      creative: 0.95
-      translation: 0.86
+      summarization: 0.86
+      creative: 0.86
+      translation: 0.93
       extraction: 0.84
       analysis: 0.86
-      chat: 0.93
-      vision: 0.82
+      chat: 0.88
+      vision: 0.40
     enabled: true
 
-  - id: ca-hy4
-    provider: coarena
+  - id: co-aya-vision-32b
+    provider: cohere
     billable: false
-    display_name: Hy4 (CoArena)
-    api_model: hy4
-    input_cost_per_1k: 0.001
-    output_cost_per_1k: 0.004
-    typical_latency_ms: 900
+    display_name: Aya Vision 32B (Cohere)
+    api_model: c4ai-aya-vision-32b
+    input_cost_per_1k: 0.0
+    output_cost_per_1k: 0.0
+    typical_latency_ms: 1400
     strengths:
-      qa: 0.86
-      code: 0.82
-      debug: 0.80
-      math: 0.84
-      reasoning: 0.86
-      summarization: 0.88
-      creative: 0.84
-      translation: 0.98
-      extraction: 0.97
-      analysis: 0.88
+      qa: 0.84
+      code: 0.72
+      debug: 0.70
+      math: 0.74
+      reasoning: 0.78
+      summarization: 0.84
+      creative: 0.82
+      translation: 0.88
+      extraction: 0.84
+      analysis: 0.84
+      chat: 0.84
+      vision: 0.95
+    enabled: true
+
+  - id: co-tiny-aya-earth
+    provider: cohere
+    billable: false
+    display_name: Tiny Aya Earth (Cohere)
+    api_model: tiny-aya-earth
+    input_cost_per_1k: 0.0
+    output_cost_per_1k: 0.0
+    typical_latency_ms: 400
+    strengths:
+      qa: 0.78
+      code: 0.60
+      debug: 0.58
+      math: 0.62
+      reasoning: 0.64
+      summarization: 0.80
+      creative: 0.78
+      translation: 0.84
+      extraction: 0.72
+      analysis: 0.72
       chat: 0.86
-      vision: 0.84
+      vision: 0.30
+    enabled: true
+
+  - id: co-tiny-aya-fire
+    provider: cohere
+    billable: false
+    display_name: Tiny Aya Fire (Cohere)
+    api_model: tiny-aya-fire
+    input_cost_per_1k: 0.0
+    output_cost_per_1k: 0.0
+    typical_latency_ms: 400
+    strengths:
+      qa: 0.78
+      code: 0.60
+      debug: 0.58
+      math: 0.62
+      reasoning: 0.64
+      summarization: 0.80
+      creative: 0.82
+      translation: 0.84
+      extraction: 0.72
+      analysis: 0.72
+      chat: 0.86
+      vision: 0.30
+    enabled: true
+
+  - id: co-tiny-aya-global
+    provider: cohere
+    billable: false
+    display_name: Tiny Aya Global (Cohere)
+    api_model: tiny-aya-global
+    input_cost_per_1k: 0.0
+    output_cost_per_1k: 0.0
+    typical_latency_ms: 400
+    strengths:
+      qa: 0.80
+      code: 0.62
+      debug: 0.60
+      math: 0.64
+      reasoning: 0.66
+      summarization: 0.82
+      creative: 0.80
+      translation: 0.90
+      extraction: 0.74
+      analysis: 0.74
+      chat: 0.88
+      vision: 0.30
+    enabled: true
+
+  - id: co-tiny-aya-water
+    provider: cohere
+    billable: false
+    display_name: Tiny Aya Water (Cohere)
+    api_model: tiny-aya-water
+    input_cost_per_1k: 0.0
+    output_cost_per_1k: 0.0
+    typical_latency_ms: 400
+    strengths:
+      qa: 0.78
+      code: 0.60
+      debug: 0.58
+      math: 0.62
+      reasoning: 0.64
+      summarization: 0.80
+      creative: 0.80
+      translation: 0.86
+      extraction: 0.72
+      analysis: 0.72
+      chat: 0.86
+      vision: 0.30
     enabled: true

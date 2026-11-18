@@ -43,7 +43,7 @@ def test_by_task_scoped_to_eval_run():
                 policy="baseline",
                 task_type="qa",
                 est_cost=0.8,
-                model="ca-claude-fable-5",
+                model="cf-gpt-oss-120b",
             ),
             _row(eval_run_id="eval-a", policy="routed", task_type="qa", est_cost=0.02),
             # Other run / live noise must not appear

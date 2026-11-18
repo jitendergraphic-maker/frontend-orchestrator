@@ -43,87 +43,36 @@ def test_specialty_winners_in_top3(monkeypatch):
     load_models.cache_clear()
     load_routing.cache_clear()
 
-    assert any(
-        m in _top_ids("code")
-        for m in ("ca-claude-sonnet-5-5", "ca-claude-opus-5-5", "ca-gpt-6-1-terra", "ca-mimo-v2-6-pro")
-    )
-    assert any(
-        m in _top_ids("debug")
-        for m in ("ca-claude-sonnet-5-5", "ca-claude-opus-5-5", "ca-mimo-v2-6-pro")
-    )
-    assert any(
-        m in _top_ids("math")
-        for m in ("ca-glm-5-3-flash", "ca-deepseek-v4-1-flash")
-    )
-    assert any(
-        m in _top_ids("reasoning")
-        for m in ("ca-claude-opus-5-5", "ca-kimi-k3-1-pro", "ca-deepseek-v4-1-flash")
-    )
-    assert any(
-        m in _top_ids("qa")
-        for m in ("ca-gemini-3-8-flash", "ca-gpt-6-1-sol", "ca-gemini-4-carbon")
-    )
+    assert any(m in _top_ids("code") for m in ("cf-qwen-coder-32b", "cf-kimi-code", "or-north-mini-code-free"))
+    assert any(m in _top_ids("debug") for m in ("cf-qwen-coder-32b", "cf-kimi-code"))
+    assert any(m in _top_ids("math") for m in ("cf-qwen3.8-27b", "cf-glm-5.3-flash", "cf-deepseek-r1"))
+    assert any(m in _top_ids("reasoning") for m in ("cf-deepseek-r1", "cf-qwq-32b"))
+    assert any(m in _top_ids("qa") for m in ("cf-llama-3.3-70b", "ca-gemini-3-8-flash", "cf-gpt-oss-120b"))
     assert any(
         m in _top_ids("summarization")
-        for m in ("ca-claude-haiku-5-5", "ca-gpt-6-luna", "ca-gemini-3-8-flash")
+        for m in ("gemini-3.5-flash-lite", "cf-llama-3.3-70b", "ca-gemini-3-8-flash")
     )
-    assert any(
-        m in _top_ids("creative")
-        for m in (
-            "ca-minimax-m3-1-flash",
-            "ca-grok-4-7",
-            "ca-claude-fable-5-2",
-            "ca-gpt-6-astra",
-        )
-    )
-    assert "ca-hy4" in _top_ids("translation")
-    assert any(
-        m in _top_ids("extraction")
-        for m in ("ca-hy4", "ca-claude-haiku-5-5")
-    )
-    assert any(
-        m in _top_ids("analysis")
-        for m in (
-            "ca-glm-5-3-flash",
-            "ca-deepseek-v4-1-flash",
-            "ca-gemini-3-8-flash",
-            "ca-gemini-4-argon",
-            "ca-claude-opus-5-5",
-        )
-    )
-    assert any(
-        m in _top_ids("chat")
-        for m in ("ca-claude-haiku-5-5", "ca-gpt-6-luna", "ca-gemini-3-8-flash")
-    )
-    assert any(
-        m in _top_ids("vision")
-        for m in ("ca-gemini-4-carbon", "ca-gemini-4-argon", "ca-gemini-3-8-flash")
-    )
-    # Every specialty's top pick is CoArena when the key is present
-    for task in (
-        "qa",
-        "code",
-        "debug",
-        "math",
-        "reasoning",
-        "summarization",
-        "creative",
-        "translation",
-        "extraction",
-        "analysis",
-        "chat",
-        "vision",
-    ):
-        assert _top_ids(task, 1)[0].startswith("ca-"), task
+    assert any(m in _top_ids("creative") for m in ("ca-gpt-6-luna", "gemini-3.5-flash-lite", "cf-llama-3.3-70b"))
+    assert any(m in _top_ids("translation") for m in ("co-command-a-translate", "co-north-small-translate", "cf-qwen3.8-27b"))
+    assert any(m in _top_ids("extraction") for m in ("cf-mistral-small", "cf-qwen-coder-32b"))
+    assert any(m in _top_ids("analysis") for m in ("cf-mistral-small", "cf-glm-5.3-flash"))
+    assert any(m in _top_ids("chat") for m in ("cf-llama-3.1-8b", "cf-gpt-oss-20b", "ca-gpt-6-luna"))
+    assert "cf-llama-vision" in _top_ids("vision", 1)
+
+    # Core specialties should stay on Cloudflare / Cohere specialists
+    for task in ("code", "debug", "math", "reasoning", "extraction", "analysis"):
+        assert _top_ids(task, 1)[0].startswith("cf-"), task
+    assert _top_ids("translation", 1)[0].startswith("co-")
+    assert _top_ids("vision", 1)[0].startswith(("cf-", "co-"))
 
 
-def test_code_specialist_outranks_gemini_generalist(monkeypatch):
+def test_code_specialist_outranks_generalist(monkeypatch):
     monkeypatch.setattr("app.router.provider_status", lambda spec: (True, None))
     load_models.cache_clear()
     load_routing.cache_clear()
     ranked = [spec.id for spec, _ in rank_models("code")]
-    assert ranked.index("ca-claude-sonnet-5-5") < ranked.index("gemini-3.6-flash")
-    assert ranked.index("ca-claude-sonnet-5-5") < ranked.index("or-north-mini-code-free")
+    assert ranked.index("cf-qwen-coder-32b") < ranked.index("gemini-3.5-flash-lite")
+    assert ranked.index("cf-qwen-coder-32b") < ranked.index("groq-qwen3-27b")
 
 
 def test_classify_new_task_types():

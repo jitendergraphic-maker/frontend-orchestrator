@@ -1,8 +1,8 @@
 from app.classifier import classify
 from app.adapters.base import AdapterError, AdapterResult
+from app.adapters.cloudflare import CloudflareAdapter
 from app.adapters.coarena import CoarenaAdapter
 from app.adapters.groq import GroqAdapter
-from app.adapters.nvidia import NvidiaAdapter
 from app.fallback import complete_with_fallback
 from app.quality import quality_score
 from app.registry import load_models
@@ -32,6 +32,7 @@ def test_rank_uses_only_configured_real_models(monkeypatch):
     }
     ranked = [spec.id for spec, _ in rank_models("code")]
     assert set(ranked) == catalog
+    assert any(mid.startswith("cf-") for mid in ranked)
     assert any(mid.startswith("ca-") for mid in ranked)
 
 
@@ -45,14 +46,19 @@ def test_groq_requires_api_key(monkeypatch):
     assert provider_available(groq_model)
 
 
-def test_nvidia_requires_api_key(monkeypatch):
-    settings = type("Settings", (), {"nvidia_api_key": ""})()
+def test_cloudflare_requires_api_credentials(monkeypatch):
+    settings = type(
+        "Settings",
+        (),
+        {"cloudflare_api_token": "", "cloudflare_account_id": ""},
+    )()
     monkeypatch.setattr("app.router.get_settings", lambda: settings)
-    nvidia_model = load_models()["nvidia-llama-3.2-11b"]
+    cf_model = load_models()["cf-llama-3.1-8b"]
 
-    assert not provider_available(nvidia_model)
-    settings.nvidia_api_key = "configured"
-    assert provider_available(nvidia_model)
+    assert not provider_available(cf_model)
+    settings.cloudflare_api_token = "cfut_test"
+    settings.cloudflare_account_id = "acct_test"
+    assert provider_available(cf_model)
 
 
 def test_gemini_requires_api_key(monkeypatch):
@@ -68,7 +74,7 @@ def test_gemini_requires_api_key(monkeypatch):
 def test_coarena_requires_api_key(monkeypatch):
     settings = type("Settings", (), {"coarena_api_key": ""})()
     monkeypatch.setattr("app.router.get_settings", lambda: settings)
-    coarena_model = load_models()["ca-claude-sonnet-5-5"]
+    coarena_model = load_models()["ca-gemini-3-8-flash"]
 
     assert not provider_available(coarena_model)
     settings.coarena_api_key = "coa_test"
@@ -123,80 +129,40 @@ def test_coarena_adapter_missing_key_raises(monkeypatch):
         assert "COARENA_API_KEY" in str(exc)
 
 
-def test_rank_prefers_coarena_when_key_present(monkeypatch):
+def test_rank_prefers_cloudflare_when_key_present(monkeypatch):
     def status(spec):
-        if spec.provider == "coarena":
+        if spec.provider == "cloudflare":
             return True, None
         if spec.provider == "mock":
             return False, "mock_excluded"
-        # Keep a few non-CoArena peers eligible so ranking has real fallbacks
-        if spec.provider in ("groq", "gemini", "openrouter", "nvidia"):
+        if spec.provider in ("groq", "gemini", "openrouter", "coarena"):
             return True, None
         return False, "unsupported_provider"
 
     monkeypatch.setattr("app.router.provider_status", status)
+    load_models.cache_clear()
 
-    for task, prefix_ok in (
-        ("code", "ca-"),
-        ("math", "ca-"),
-        ("creative", "ca-"),
-    ):
+    for task in ("code", "math", "reasoning", "vision"):
         top = rank_models(task)[0][0]
-        assert top.id.startswith(prefix_ok), f"{task} top was {top.id}"
-        assert top.provider == "coarena"
+        assert top.id.startswith("cf-"), f"{task} top was {top.id}"
+        assert top.provider == "cloudflare"
 
 
-def test_rank_without_coarena_key_uses_existing_providers(monkeypatch):
+def test_rank_without_cloudflare_key_uses_existing_providers(monkeypatch):
     def status(spec):
-        if spec.provider == "coarena":
+        if spec.provider == "cloudflare":
             return False, "missing_credentials"
         if spec.provider == "mock":
             return False, "mock_excluded"
-        if spec.provider in ("groq", "gemini", "openrouter", "nvidia"):
+        if spec.provider in ("groq", "gemini", "openrouter", "coarena"):
             return True, None
         return False, "unsupported_provider"
 
     monkeypatch.setattr("app.router.provider_status", status)
     ranked = [spec for spec, _ in rank_models("code")]
     assert ranked
-    assert all(spec.provider != "coarena" for spec in ranked)
-    assert ranked[0].provider in ("groq", "gemini", "openrouter", "nvidia")
-
-
-def test_nvidia_adapter_uses_openai_compatible_endpoint(monkeypatch):
-    class Response:
-        status_code = 200
-
-        def json(self):
-            return {
-                "choices": [{"message": {"content": "A concise answer"}}],
-                "usage": {"prompt_tokens": 5, "completion_tokens": 3},
-            }
-
-    request = {}
-
-    def post(url, **kwargs):
-        request.update(url=url, **kwargs)
-        return Response()
-
-    monkeypatch.setattr(
-        "app.adapters.nvidia.get_settings",
-        lambda: type(
-            "Settings", (), {"nvidia_api_key": "test-key", "completion_max_tokens": 1536}
-        )(),
-    )
-    monkeypatch.setattr("app.adapters.nvidia.httpx.post", post)
-
-    result = NvidiaAdapter().complete(
-        api_model="meta/llama-3.2-11b-vision-instruct", prompt="Question", timeout=5
-    )
-
-    assert result.output == "A concise answer"
-    assert request["url"] == (
-        "https://integrate.api.nvidia.com/v1/chat/completions"
-    )
-    assert request["headers"]["Authorization"] == "Bearer test-key"
-    assert request["json"]["model"] == "meta/llama-3.2-11b-vision-instruct"
+    assert all(spec.provider != "cloudflare" for spec in ranked)
+    assert ranked[0].provider in ("groq", "gemini", "openrouter", "coarena")
 
 
 def test_quality_empty_is_zero():
@@ -218,11 +184,11 @@ def test_fallback_continues_after_unexpected_adapter_error(monkeypatch):
     outcome = complete_with_fallback(
         "What is HTTP?",
         "qa",
-        ranked=[models["groq-gpt-oss-20b"], models["nvidia-llama-3.2-11b"]],
+        ranked=[models["groq-gpt-oss-20b"], models["cf-llama-3.1-8b"]],
     )
 
-    assert calls == ["groq-gpt-oss-20b", "nvidia-llama-3.2-11b"]
-    assert outcome.spec.id == "nvidia-llama-3.2-11b"
+    assert calls == ["groq-gpt-oss-20b", "cf-llama-3.1-8b"]
+    assert outcome.spec.id == "cf-llama-3.1-8b"
     assert outcome.fallback_used is True
 
 
@@ -290,7 +256,7 @@ def test_strict_baseline_never_calls_second_model(monkeypatch):
     outcome = complete_with_fallback(
         "What is HTTP?",
         "qa",
-        ranked=[models["groq-gpt-oss-20b"], models["nvidia-llama-3.2-11b"]],
+        ranked=[models["groq-gpt-oss-20b"], models["cf-llama-3.1-8b"]],
         allow_fallback=False,
     )
 
@@ -312,12 +278,12 @@ def test_attempt_trace_records_fallback_chain(monkeypatch):
     outcome = complete_with_fallback(
         "What is HTTP?",
         "qa",
-        ranked=[models["groq-gpt-oss-20b"], models["nvidia-llama-3.2-11b"]],
+        ranked=[models["groq-gpt-oss-20b"], models["cf-llama-3.1-8b"]],
     )
 
     assert [a.outcome for a in outcome.attempts] == ["error", "success"]
     assert outcome.attempts[0].reason == "timeout"
-    assert outcome.attempts[1].model == "nvidia-llama-3.2-11b"
+    assert outcome.attempts[1].model == "cf-llama-3.1-8b"
     assert outcome.fallback_used is True
 
 
@@ -345,7 +311,7 @@ def test_fallback_attempt_trace_on_success_path(monkeypatch):
     outcome = complete_with_fallback(
         "Hi",
         "qa",
-        ranked=[models["nvidia-llama-3.2-11b"]],
+        ranked=[models["cf-llama-3.1-8b"]],
     )
     assert outcome.success is True
     assert len(outcome.attempts) == 1

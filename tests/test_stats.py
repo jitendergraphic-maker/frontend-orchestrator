@@ -41,7 +41,7 @@ def test_live_overview_counts_orchestra_and_excludes_mock_eval():
             _row(
                 policy="orchestra",
                 est_cost=0.02,
-                model="ca-claude-sonnet-5-5",
+                model="cf-qwen-coder-32b",
                 tokens_in=20_000,
                 tokens_out=10_000,
             ),
@@ -112,7 +112,7 @@ def test_live_by_model_and_by_task_exclude_mock_eval():
         [
             _row(
                 policy="orchestra",
-                model="ca-claude-sonnet-5-5",
+                model="cf-qwen-coder-32b",
                 est_cost=0.02,
                 tokens_in=5_000,
                 tokens_out=2_000,
@@ -134,7 +134,7 @@ def test_live_by_model_and_by_task_exclude_mock_eval():
     db.commit()
 
     models = {r["model"]: r for r in by_model(db, scope="live")}
-    assert models["ca-claude-sonnet-5-5"]["requests"] == 1
+    assert models["cf-qwen-coder-32b"]["requests"] == 1
     assert models["ca-deepseek-v4-1-flash"]["requests"] == 0
     assert "mock-fast" not in models
 

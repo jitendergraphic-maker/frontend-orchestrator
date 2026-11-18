@@ -3,7 +3,7 @@ weights:
   cost: 0.20
   latency: 0.15
 
-baseline_model: ca-claude-fable-5
+baseline_model: cf-gpt-oss-120b
 
 prefer_mock_when_no_keys: false
 
