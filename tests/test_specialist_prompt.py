@@ -52,6 +52,41 @@ def test_clean_specialist_text_strips_refusal_boilerplate():
     assert "not part of the qa slice" not in cleaned.lower()
 
 
+def test_clean_strips_handled_separately_walkthrough():
+    messy = (
+        "1\n"
+        "An API gateway is an entry point.\n"
+        "2\n"
+        "This section is for code and will be handled separately.\n"
+        "3\n"
+        "This section is for debugging and will be handled separately.\n"
+        "11\n"
+        "Wrong parseInt answer should also be removed if above pattern...\n"
+    )
+    # Lines 2/3 refusals + bare indexes drop; keep real gateway answer.
+    cleaned = clean_specialist_text(
+        "An API gateway is an entry point.\n"
+        "2\n"
+        "This section is for code and will be handled separately.\n"
+        "3\n"
+        "This section is for debugging and will be handled separately.\n"
+    )
+    assert "API gateway" in cleaned
+    assert "handled separately" not in cleaned.lower()
+    assert "this section is for" not in cleaned.lower()
+
+
+def test_decompose_drops_instruction_preamble():
+    prompt = (
+        "Do EVERY numbered section separately. Keep the headers.\n\n"
+        "1) In 3 bullets, what is an API gateway?\n\n"
+        "2) Write a Python function is_palindrome.\n"
+    )
+    parts = decompose(prompt)
+    assert not any("Do EVERY numbered section" in p.text for p in parts)
+    assert any("API gateway" in p.text for p in parts)
+
+
 def test_stitch_drops_refusal_lines():
     parts = [
         PromptPart(id="p1", text="What is an API gateway?", task_type="qa"),

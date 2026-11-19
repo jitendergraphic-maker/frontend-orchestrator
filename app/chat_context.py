@@ -88,13 +88,16 @@ def adapter_messages(
     """
     Build OpenAI-style messages for adapters.
 
-    If override_user is set (orchestra specialist prompt), prior history is kept
-    and the final user message is replaced with override_user.
+    If override_user is set (orchestra specialist), return ONLY that text —
+    never re-attach prior conversation (it re-injects multi-section prompts and
+    causes "handled separately" walkthrough junk).
     """
     prompt = resolve_prompt(body)
+    if override_user is not None:
+        return [{"role": "user", "content": override_user}]
+
     if not body.messages:
-        content = override_user if override_user is not None else prompt
-        return [{"role": "user", "content": content}]
+        return [{"role": "user", "content": prompt}]
 
     turns = trim_messages(body.messages)
     out: list[dict[str, str]] = []
@@ -102,19 +105,7 @@ def adapter_messages(
         role = m.role if m.role in ("user", "assistant", "system") else "user"
         out.append({"role": role, "content": m.content})
 
-    if override_user is not None:
-        # Specialists get a single task prompt; fold prior chat into a short blurb.
-        blurb = history_blurb(body)
-        if blurb:
-            return [
-                {
-                    "role": "user",
-                    "content": f"Prior conversation:\n{blurb}\n\nCurrent task:\n{override_user}",
-                }
-            ]
-        return [{"role": "user", "content": override_user}]
     if not out or out[-1]["role"] != "user":
-        # Ensure the latest user prompt is present.
         if prompt:
             out.append({"role": "user", "content": prompt})
     elif prompt and out[-1]["content"].strip() != prompt:

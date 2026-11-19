@@ -20,28 +20,47 @@ _TASK_TITLES = {
     "vision": "Vision",
 }
 
-# Models sometimes invent meta-refusals when they saw other slices in context.
+# Meta-refusal / walkthrough lines free models invent for other slices.
 _REFUSAL_LINE = re.compile(
     r"(?i)^\s*(?:"
-    r"this section is for\b.+\bnot part of\b.+"
+    r".*\bthis section is for\b.*"
+    r"|.*\bwill be handled separately\b.*"
+    r"|.*\bhandled separately\b.*"
+    r"|.*\bhandled by another(?: specialist)?\b.*"
     r"|.*\bnot part of (?:the |this |your )?(?:qa |assigned )?slice\b.*"
     r"|.*\bnot part of (?:this |your )?assignment\b.*"
-    r"|.*\bhandled (?:separately|by another specialist)\b.*"
+    r"|.*\bother specialists (?:will )?handle\b.*"
     r")\s*$"
 )
+_BARE_INDEX = re.compile(r"^\s*\d+\s*$")
 
 
 def clean_specialist_text(text: str) -> str:
-    """Drop slice-refusal boilerplate; keep real answer lines."""
+    """Drop slice-refusal / fake walkthrough lines; keep real answer lines."""
     if not text:
         return ""
-    kept: list[str] = []
-    for line in text.splitlines():
-        if _REFUSAL_LINE.match(line.strip()):
+    lines = text.splitlines()
+    drop: set[int] = set()
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if _REFUSAL_LINE.match(stripped):
+            drop.add(i)
+            # Also drop a bare "12" index line immediately above the refusal.
+            if i > 0 and _BARE_INDEX.match(lines[i - 1].strip()):
+                drop.add(i - 1)
             continue
-        kept.append(line)
-    cleaned = "\n".join(kept).strip()
-    # Collapse leftover empty runs after stripping.
+    kept = [line for i, line in enumerate(lines) if i not in drop]
+    # Second pass: orphan bare numbers left between content.
+    cleaned_lines: list[str] = []
+    for i, line in enumerate(kept):
+        if _BARE_INDEX.match(line.strip()):
+            # Keep bare numbers only if they look like list content inside an answer
+            # (followed by non-refusal prose on next line that isn't empty).
+            nxt = kept[i + 1].strip() if i + 1 < len(kept) else ""
+            if not nxt or _REFUSAL_LINE.match(nxt) or _BARE_INDEX.match(nxt):
+                continue
+        cleaned_lines.append(line)
+    cleaned = "\n".join(cleaned_lines).strip()
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned
 

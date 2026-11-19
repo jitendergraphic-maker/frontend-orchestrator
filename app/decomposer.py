@@ -211,9 +211,31 @@ def _split_blocks(prompt: str) -> list[str]:
     return [text]
 
 
+_INSTRUCTION_ONLY = re.compile(
+    r"(?is)^\s*(?:do every numbered section.*(?:keep the headers)?|"
+    r"keep the headers\.?|"
+    r"answer each (?:section|part) separately\.?|"
+    r"do all of the following(?: as clearly labeled sections)?\.?)\s*$"
+)
+_LEADING_INDEX = re.compile(r"^\s*\d+[\).]\s*:?\s*")
+
+
+def _is_instruction_only(text: str) -> bool:
+    return bool(_INSTRUCTION_ONLY.match(text.strip()))
+
+
+def _strip_leading_index(text: str) -> str:
+    return _LEADING_INDEX.sub("", text.strip(), count=1).strip()
+
+
 def decompose(prompt: str, hint: Optional[TaskType] = None) -> list[PromptPart]:
     """Split prompt into tagged parts. Single-part prompts return one entry."""
     blocks = _split_blocks(prompt)
+    # Drop "Do EVERY numbered section..." style preambles when other blocks exist.
+    if len(blocks) >= 2:
+        blocks = [b for b in blocks if not _is_instruction_only(b)]
+        if not blocks:
+            blocks = _split_blocks(prompt)
     parts: list[PromptPart] = []
     for i, block in enumerate(blocks):
         part_hint = hint if len(blocks) == 1 else None
@@ -239,22 +261,23 @@ def specialist_prompt(
 
     Multi-part orchestra (non-empty sibling_summaries): isolate — send only the
     assigned slice. Including the full original request causes models to walk
-    other numbered sections and emit "not part of this slice" junk.
+    other numbered sections and emit refusal walkthrough junk.
     """
     siblings = sibling_summaries or []
     task = part.task_type
-    body = (part.text or "").strip()
+    body = _strip_leading_index((part.text or "").strip())
 
     if siblings:
         return (
             f"You are a specialist for task_type={task}.\n"
-            f"Answer ONLY the task below. Be complete and concise.\n"
-            f"Do not mention other tasks, sections, or slices.\n"
-            f"Do not write placeholders like \"not part of this slice\" "
-            f"or \"this section is for …\".\n"
-            f"Do not list or refuse other numbered items — other specialists "
-            f"handle them.\n"
-            f"Finish your answer; do not stop mid-sentence.\n\n"
+            f"Your entire reply must answer ONLY the single TASK below.\n"
+            f"Rules:\n"
+            f"- Output the answer itself — nothing else.\n"
+            f"- Do not invent a numbered list of other tasks.\n"
+            f"- Do not write \"this section is for…\", \"handled separately\", "
+            f"\"not part of this slice\", or similar meta lines.\n"
+            f"- Do not translate, extract, or solve anything outside the TASK.\n"
+            f"- Be complete and concise; finish your answer.\n\n"
             f"TASK:\n{body}"
         )
 

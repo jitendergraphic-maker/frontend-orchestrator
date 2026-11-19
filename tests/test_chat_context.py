@@ -72,11 +72,11 @@ def test_adapter_messages_override_for_specialist():
         ],
     )
     msgs = adapter_messages(body, override_user="Specialist: write code only")
-    assert msgs[-1]["role"] == "user"
-    assert "Specialist: write code only" in msgs[-1]["content"]
-    assert "Earlier" in msgs[-1]["content"] or any(
-        m["content"] == "Earlier" for m in msgs
-    )
+    assert len(msgs) == 1
+    assert msgs[0]["role"] == "user"
+    assert msgs[0]["content"] == "Specialist: write code only"
+    assert "Earlier" not in msgs[0]["content"]
+    assert "Prior conversation" not in msgs[0]["content"]
 
 
 def test_complete_request_requires_user_in_messages():
