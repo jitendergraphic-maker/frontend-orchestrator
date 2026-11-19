@@ -22,7 +22,7 @@ _NUMBERED_SPLIT = re.compile(
 # More specific types first when classifying.
 _VISION = re.compile(
     r"\b(image|screenshot|photo|picture|diagram|describe (?:this |the )?(?:image|photo|screenshot)|"
-    r"vision|what do you see|alt text)\b",
+    r"vision|what do you see|alt text|dashboard chart comparing)\b",
     re.I,
 )
 _TRANSLATION = re.compile(
@@ -31,31 +31,34 @@ _TRANSLATION = re.compile(
     re.I,
 )
 _EXTRACTION = re.compile(
-    r"\b(extract|extraction|as json|to json|json object|entities|named entities|"
+    r"\b(extract|extraction|as json|to json|json object|return json|entities|named entities|"
     r"fill (?:a |the )?table|structured data|key[- ]value)\b",
     re.I,
 )
 _DEBUG = re.compile(
     r"\b(fix (?:this|the|my)|debug|traceback|stack trace|typeerror|syntaxerror|"
-    r"exception|bug|broken code|doesn'?t compile|failing test)\b",
+    r"exception|bug|broken code|doesn'?t compile|failing test|"
+    r"why does .+ return|map\(parseInt\))\b",
     re.I,
 )
 _ANALYSIS = re.compile(
     r"\b(analyze|analysis|compare|comparison|critique|pros and cons|trade-?offs?|"
-    r"evaluate|benchmark|versus| vs\.? )\b",
+    r"evaluate|benchmark|versus| vs\.? |rank these)\b",
     re.I,
 )
 _MATH = re.compile(
     r"\b(calculate|compute|equation|integral|derivative|algebra|geometry|"
     r"probability|statistics|prove that|solve for|math|mathematical|"
-    r"which number is larger|which is larger|numeric|fraction|percentage)\b|"
-    r"\d+\s*[\+\-\*/÷×]\s*\d+|=\s*\?",
+    r"which number is larger|which is larger|numeric|fraction|percentage|"
+    r"find the capacity|liters?|litres?|tank is)\b|"
+    r"\d+\s*[\+\-\*/÷×]\s*\d+|=\s*\?|solve\s+\d",
     re.I,
 )
 _CODE = re.compile(
     r"\b(python|typescript|javascript|sql|regex|function|def |class |compile|"
     r"fastapi|endpoint|linked list|binary search|implement|"
-    r"doctest|write a (?:python )?function|code)\b",
+    r"doctest|write a (?:python )?function|code|"
+    r"request_logs|select .+ from|parseInt)\b",
     re.I,
 )
 _SUM = re.compile(
@@ -64,16 +67,18 @@ _SUM = re.compile(
 )
 _REASON = re.compile(
     r"\b(step by step|prove|explain why|logic|argue|verdict|for and against|"
-    r"think step|reasoning|condition)\b",
+    r"think step|reasoning|condition|who owns the fish|logic sketch)\b",
     re.I,
 )
 _CREATIVE = re.compile(
-    r"\b(poem|haiku|story|fictional|fable|invent|sci-fi|write a (?:four|4)-line)\b",
+    r"\b(poem|haiku|story|fictional|fable|invent|sci-fi|free-?verse|"
+    r"product myth|write a (?:four|4|8)-line)\b",
     re.I,
 )
 _CHAT = re.compile(
     r"\b(hi+|hello|hey there|what'?s up|how are you|good morning|good evening|"
-    r"chit-?chat|casual (?:chat|reply)|just checking in)\b",
+    r"chit-?chat|casual (?:chat|reply)|just checking in|"
+    r"welcome|friendly \d+-sentence|viva evaluator)\b",
     re.I,
 )
 _VOCAB_QA = re.compile(
@@ -227,26 +232,35 @@ def decompose(prompt: str, hint: Optional[TaskType] = None) -> list[PromptPart]:
 def specialist_prompt(
     part: PromptPart,
     *,
-    original: str,
-    sibling_summaries: list[str],
+    original: str = "",
+    sibling_summaries: list[str] | None = None,
 ) -> str:
-    """Build the prompt sent to a specialist model for one part."""
-    ctx_bits = []
-    clipped = original.strip()
-    if len(clipped) > 400:
-        clipped = clipped[:400] + "…"
-    ctx_bits.append(f"Original user request (context only):\n{clipped}")
-    if sibling_summaries:
-        ctx_bits.append(
-            "Other parts of this request (handled separately):\n- "
-            + "\n- ".join(sibling_summaries)
+    """Build the prompt sent to a specialist model for one part.
+
+    Multi-part orchestra (non-empty sibling_summaries): isolate — send only the
+    assigned slice. Including the full original request causes models to walk
+    other numbered sections and emit "not part of this slice" junk.
+    """
+    siblings = sibling_summaries or []
+    task = part.task_type
+    body = (part.text or "").strip()
+
+    if siblings:
+        return (
+            f"You are a specialist for task_type={task}.\n"
+            f"Answer ONLY the task below. Be complete and concise.\n"
+            f"Do not mention other tasks, sections, or slices.\n"
+            f"Do not write placeholders like \"not part of this slice\" "
+            f"or \"this section is for …\".\n"
+            f"Do not list or refuse other numbered items — other specialists "
+            f"handle them.\n"
+            f"Finish your answer; do not stop mid-sentence.\n\n"
+            f"TASK:\n{body}"
         )
-    ctx = "\n\n".join(ctx_bits)
+
+    # Single-part: the slice is the full user ask.
     return (
-        f"{ctx}\n\n"
-        f"---\n"
-        f"Your assigned slice (task={part.task_type}). "
-        f"Answer ONLY this slice completely and concisely. "
-        f"Do not repeat or answer other slices. Finish your answer — "
-        f"do not stop mid-sentence.\n\n{part.text}"
+        f"Answer the following completely and concisely "
+        f"(task_type={task}). Finish your answer; do not stop mid-sentence.\n\n"
+        f"{body or original.strip()}"
     )

@@ -12,6 +12,7 @@ from app.chat_context import adapter_messages, decompose_input, resolve_prompt
 from app.classifier import classify
 from app.db import RequestLog
 from app.decomposer import decompose, specialist_prompt
+from app.synthesizer import clean_specialist_text
 from app.fallback import CompletionOutcome, complete_with_fallback, iter_complete_with_fallback
 from app.quality import quality_score
 from app.registry import ModelSpec, load_models, load_routing
@@ -204,10 +205,11 @@ def _run_part(
         messages=msgs,
         on_event=on_event,
     )
+    raw_out = outcome.result.output if outcome.success else ""
     return PartOutput(
         part_id=part.id,
         task_type=part.task_type,
-        text=outcome.result.output if outcome.success else "",
+        text=clean_specialist_text(raw_out) if raw_out else "",
         model=outcome.spec.id,
         provider=outcome.spec.provider,
         success=outcome.success,
