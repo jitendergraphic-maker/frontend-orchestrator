@@ -156,3 +156,92 @@ def test_numbered_decompose_keeps_gateway_slice():
     assert len(parts) >= 3
     assert any("API gateway" in p.text for p in parts)
     assert any("is_palindrome" in p.text for p in parts)
+
+
+DEMO_20 = """Do EVERY numbered section separately. Keep the headers.
+
+1) : In 3 bullets, what is an API gateway?
+
+2) : Write a Python function `is_palindrome(s: str) -> bool` with type hints and a doctest.
+
+3) Fix this bug and explain it:
+def first(xs):
+    return xs[0]
+print(first([]))
+
+4)A tank is 3/4 full. 20 liters are removed and it becomes 2/3 full. Find the capacity. Show steps.
+
+5) There are 5 houses in a row. The green house is left of the white. Who owns the fish?
+
+6)  Summarize in 2 sentences: Cloudflare Workers AI and Groq are free-tier endpoints.
+
+7) Write an 8-line free-verse poem titled "Orchestra of Models".
+
+8) Translate to Hindi, French, Spanish, and Arabic:
+"Route each subtask to the best free model."
+
+9)Return JSON with keys name, city, stack from:
+"Ananya Rao in Hyderabad builds FastAPI + React orchestration demos."
+
+10)  Compare Cloudflare vs Groq vs Cohere for a student demo. Markdown table.
+
+11Friendly 4-sentence welcome for a capstone viva evaluator watching Routing Theater.
+
+12): Describe what a dashboard chart comparing routed vs baseline cost in INR would show.
+
+13) : Write SQL to find the top 5 models by request count from table request_logs(model, id).
+
+14) : Why does `['10','10','10'].map(parseInt)` return [10, NaN, 2]? Fix it.
+
+15) Solve 2x+5=17 and check the answer.
+
+16) REASONING: Why can a weaker free model beat a larger model on translation but lose on multi-step math?
+
+17) TRANSLATION (Arabic focus): Translate to Arabic only: "Command models handle multilingual chat well."
+
+18)  Invent a 1-paragraph product myth about "Tiny Aya" models as elemental spirits.
+
+19) From this log, extract model, provider, latency_ms as JSON:
+"model=cf-gpt-oss-120b provider=cloudflare latency_ms=2200 success=true"
+
+20) Rank these for coding specialty: Qwen2.5 Coder, Kimi K2.7 Code, North Mini Code, Llama 3.1 8B.
+"""
+
+
+def test_demo_20_section_decompose_count_and_content():
+    parts = decompose(DEMO_20)
+    assert 18 <= len(parts) <= 22
+    blob = "\n".join(p.text for p in parts)
+    assert "tank" in blob.lower() or "capacity" in blob.lower()
+    assert "Ananya Rao" in blob
+    assert "viva evaluator" in blob.lower() or "Routing Theater" in blob
+    assert "dashboard chart" in blob.lower()
+    assert "request_logs" in blob
+    assert any(p.task_type == "reasoning" and "REASONING" in p.text for p in parts)
+
+
+def test_leading_reasoning_label_beats_translation_keyword():
+    task, why = classify_segment(
+        "16) REASONING: Why can a weaker free model beat a larger model on translation "
+        "but lose on multi-step math?"
+    )
+    assert task == "reasoning"
+    assert why == "leading_label"
+
+
+def test_clean_strips_not_part_of_assigned_task_wall():
+    messy = (
+        "An API gateway is an entry point for clients.\n"
+        "It handles auth and routing.\n"
+        "2\n"
+        "This section is not part of the assigned task.\n"
+        "3\n"
+        "This section is not part of the assigned task.\n"
+        "26\n"
+        "This section is not part of the assigned task.\n"
+    )
+    cleaned = clean_specialist_text(messy)
+    assert "API gateway" in cleaned
+    assert "auth and routing" in cleaned
+    assert "not part of the assigned task" not in cleaned.lower()
+    assert "\n2\n" not in cleaned and not cleaned.strip().endswith("2")

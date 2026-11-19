@@ -11,13 +11,42 @@ from app.schemas import PromptPart, TaskType
 
 _HEADING = re.compile(
     r"(?m)^(?:#{1,3}\s+.+|[A-Z][A-Z0-9 _/-]{2,40}:\s*$|"
-    r"(?:\d+[\).]|[A-E][\).]|[-*•])\s+\S.+)$"
+    r"(?:\d+[\).]\s*|[A-E][\).]\s*|[-*•]\s+)\S.+)$"
 )
+# Optional space after )/. so "4)A tank" and "12): Describe" still split.
+# Also "11Friendly" (missing paren) via digits immediately followed by a letter.
 _NUMBERED_SPLIT = re.compile(
-    r"(?m)(?=^(?:\d+[\).]\s+|[A-E][\).]\s+|#{1,3}\s+|"
-    r"(?:REASONING|CODE|QA|SUMMARY|HAIKU|MATH|VOCAB|DEFINE|DEBUG|"
-    r"TRANSLAT|EXTRACT|ANALYSIS|VISION|CHAT)\b))"
+    r"(?m)(?=^(?:"
+    r"\d+[\).]\s*"
+    r"|\d+(?=[A-Za-z])"
+    r"|[A-E][\).]\s*"
+    r"|#{1,3}\s+"
+    r"|(?:REASONING|CODE|QA|SUMMARY|HAIKU|MATH|VOCAB|DEFINE|DEBUG|"
+    r"TRANSLAT|EXTRACT|ANALYSIS|VISION|CHAT)\b"
+    r"))"
 )
+_LEADING_LABEL = re.compile(
+    r"(?is)^\s*(?:\d+[\).]\s*:?\s*|\d+(?=[A-Za-z]))?"
+    r"(REASONING|TRANSLATION|TRANSLAT|CODE|DEBUG|MATH|QA|SUMMARY|SUMMARIZATION|"
+    r"CREATIVE|EXTRACTION|EXTRACT|ANALYSIS|VISION|CHAT)\s*[:\-–]\s*"
+)
+_LABEL_TO_TASK: dict[str, TaskType] = {
+    "REASONING": "reasoning",
+    "TRANSLATION": "translation",
+    "TRANSLAT": "translation",
+    "CODE": "code",
+    "DEBUG": "debug",
+    "MATH": "math",
+    "QA": "qa",
+    "SUMMARY": "summarization",
+    "SUMMARIZATION": "summarization",
+    "CREATIVE": "creative",
+    "EXTRACTION": "extraction",
+    "EXTRACT": "extraction",
+    "ANALYSIS": "analysis",
+    "VISION": "vision",
+    "CHAT": "chat",
+}
 
 # More specific types first when classifying.
 _VISION = re.compile(
@@ -91,6 +120,13 @@ _VOCAB_QA = re.compile(
 def classify_segment(text: str, hint: Optional[TaskType] = None) -> tuple[TaskType, str]:
     if hint:
         return hint, "client_hint"
+    # Explicit leading labels win (e.g. "16) REASONING: … translation …").
+    label_m = _LEADING_LABEL.match(text.strip())
+    if label_m:
+        key = label_m.group(1).upper()
+        task = _LABEL_TO_TASK.get(key)
+        if task:
+            return task, "leading_label"
     # Specific → general
     if _VISION.search(text):
         return "vision", "vision_keywords"

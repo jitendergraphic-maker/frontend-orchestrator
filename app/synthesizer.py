@@ -24,15 +24,22 @@ _TASK_TITLES = {
 _REFUSAL_LINE = re.compile(
     r"(?i)^\s*(?:"
     r".*\bthis section is for\b.*"
+    r"|.*\bthis section is not part\b.*"
     r"|.*\bwill be handled separately\b.*"
     r"|.*\bhandled separately\b.*"
     r"|.*\bhandled by another(?: specialist)?\b.*"
+    r"|.*\bnot part of the assigned task\b.*"
+    r"|.*\bnot part of (?:the )?assigned\b.*"
     r"|.*\bnot part of (?:the |this |your )?(?:qa |assigned )?slice\b.*"
     r"|.*\bnot part of (?:this |your )?assignment\b.*"
     r"|.*\bother specialists (?:will )?handle\b.*"
     r")\s*$"
 )
 _BARE_INDEX = re.compile(r"^\s*\d+\s*$")
+# "3 This section is not part..." on one line
+_INDEX_PREFIXED_REFUSAL = re.compile(
+    r"(?i)^\s*\d+\s+.*\b(?:not part of|handled separately|this section is for)\b.*"
+)
 
 
 def clean_specialist_text(text: str) -> str:
@@ -43,23 +50,24 @@ def clean_specialist_text(text: str) -> str:
     drop: set[int] = set()
     for i, line in enumerate(lines):
         stripped = line.strip()
-        if _REFUSAL_LINE.match(stripped):
+        if (
+            _REFUSAL_LINE.match(stripped)
+            or _INDEX_PREFIXED_REFUSAL.match(stripped)
+        ):
             drop.add(i)
-            # Also drop a bare "12" index line immediately above the refusal.
             if i > 0 and _BARE_INDEX.match(lines[i - 1].strip()):
                 drop.add(i - 1)
             continue
     kept = [line for i, line in enumerate(lines) if i not in drop]
-    # Second pass: orphan bare numbers left between content.
+
     cleaned_lines: list[str] = []
     for i, line in enumerate(kept):
         if _BARE_INDEX.match(line.strip()):
-            # Keep bare numbers only if they look like list content inside an answer
-            # (followed by non-refusal prose on next line that isn't empty).
             nxt = kept[i + 1].strip() if i + 1 < len(kept) else ""
             if not nxt or _REFUSAL_LINE.match(nxt) or _BARE_INDEX.match(nxt):
                 continue
         cleaned_lines.append(line)
+
     cleaned = "\n".join(cleaned_lines).strip()
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned
